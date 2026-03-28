@@ -1,0 +1,47 @@
+### --- General / IDEs --- ###
+.vscode/
+.idea/
+*.swp
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+
+### --- Python --- ###
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+### --- JavaScript / Node.js --- ###
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.yarn/
+dist/
+out/
+build/
+.cache/
+
+### --- Java (Maven/Gradle) --- ###
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+.gradle/
+bin/
+!gradle-wrapper.jar
+.mvn/

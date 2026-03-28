@@ -1,9 +1,14 @@
-FROM openjdk:21-jdk-slim
+FROM eclipse-temurin:21-jdk
 
 WORKDIR /app
 
-COPY . .
+RUN apt-get update && apt-get install -y maven && rm -rf /var/lib/apt/lists/*
 
-RUN ./mvnw clean package -DskipTests
+COPY pom.xml .
+COPY src ./src
 
-CMD ["java", "-jar", "target/app.jar"]
+RUN mvn clean package -DskipTests
+
+EXPOSE 8080
+
+CMD ["java", "-jar", "target/api-0.0.1-SNAPSHOT.jar"]

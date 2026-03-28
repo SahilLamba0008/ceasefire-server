@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres
     environment:
       POSTGRES_DB: clipforge
       POSTGRES_USER: postgres
@@ -17,17 +17,26 @@ services:
       - "15672:15672"
 
   api:
-    build: ../services/api
+    build:
+      context: ../services/api
     ports:
       - "8080:8080"
     depends_on:
       - postgres
       - rabbitmq
+    env_file:
+      - ../.env
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/clipforge
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_RABBITMQ_HOST: rabbitmq
 
   worker:
-    build: ../services/worker
+    build:
+      context: ../services/worker
     depends_on:
       - rabbitmq
       - postgres
+    env_file:
+      - ../.env

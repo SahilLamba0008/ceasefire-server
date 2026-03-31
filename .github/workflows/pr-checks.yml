@@ -25,7 +25,6 @@ jobs:
   # ── Java / Spring Boot checks ──────────────────────────────────────────────
   java-checks:
     needs: detect-changes
-    if: needs.detect-changes.outputs.java == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,26 +33,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Skip if no Java changes
+        if: needs.detect-changes.outputs.java != 'true'
+        run: |
+          echo "No changes in services/api — skipping Java checks."
+          exit 0
+
       - uses: actions/setup-java@v4
+        if: needs.detect-changes.outputs.java == 'true'
         with:
           java-version: '21'
           distribution: 'temurin'
 
       # Matches Gradle version used in the API Dockerfile
       - uses: gradle/actions/setup-gradle@v4
+        if: needs.detect-changes.outputs.java == 'true'
         with:
           gradle-version: '8.14'
 
       - name: Compile and run tests
+        if: needs.detect-changes.outputs.java == 'true'
         run: gradle test
 
       - name: Docker build check
+        if: needs.detect-changes.outputs.java == 'true'
         run: docker build .
 
   # ── Python / Worker checks ─────────────────────────────────────────────────
   python-checks:
     needs: detect-changes
-    if: needs.detect-changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -62,19 +70,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Skip if no Python changes
+        if: needs.detect-changes.outputs.python != 'true'
+        run: |
+          echo "No changes in services/worker — skipping Python checks."
+          exit 0
+
       - uses: actions/setup-python@v5
+        if: needs.detect-changes.outputs.python == 'true'
         with:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: services/worker/requirements.txt
 
       - name: Install dependencies
+        if: needs.detect-changes.outputs.python == 'true'
         run: pip install -r requirements.txt
 
       - name: Lint with ruff
+        if: needs.detect-changes.outputs.python == 'true'
         run: |
           pip install ruff
           ruff check .
 
       - name: Docker build check
+        if: needs.detect-changes.outputs.python == 'true'
         run: docker build .

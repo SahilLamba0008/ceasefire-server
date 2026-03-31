@@ -1,3 +1,4 @@
+# Stage 1: Build
 FROM eclipse-temurin:21-jdk AS build
 
 WORKDIR /app
@@ -15,12 +16,16 @@ COPY src ./src
 
 RUN gradle clean bootJar -x test --no-daemon
 
-FROM eclipse-temurin:21-jdk
+# Stage 2: Run
+FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
 COPY --from=build /app/build/libs/*.jar app.jar
 
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
 EXPOSE 8080
 
-CMD ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]

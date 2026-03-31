@@ -7,6 +7,8 @@
 Thumbs.db
 .env
 .env.*
+!.env.example
+.docker-env
 
 ### --- Python --- ###
 __pycache__/

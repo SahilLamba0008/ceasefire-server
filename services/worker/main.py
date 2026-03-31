@@ -1,5 +1,7 @@
 import time
 
+from pipeline import ingest, transcribe, analyze, render
+
 def main():
     print("Worker started...", flush=True)
     while True:

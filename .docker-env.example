@@ -1,0 +1,9 @@
+# Docker image tag to use for local development.
+# Copy this file to .docker-env and edit as needed.
+#
+#   latest        → always pulls the newest build from Docker Hub (default)
+#   a1b2c3d       → pins to a specific commit snapshot built by CI/CD
+#   local         → uses images you built yourself with `make build`
+#                   (note: use `make dev-local` instead of `make dev` for this)
+#
+TAG=latest

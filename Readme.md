@@ -35,7 +35,7 @@ $env:SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/clipforge"
 $env:SPRING_DATASOURCE_USERNAME="postgres"
 $env:SPRING_DATASOURCE_PASSWORD="postgres"
 $env:SPRING_RABBITMQ_HOST="localhost"
-mvn spring-boot:run
+gradle bootRun
 ```
 3. Run Worker locally:
 ```powershell
@@ -50,7 +50,7 @@ python main.py
 
 ## Install Requirements
 - Docker flow: no manual install needed (images install dependencies).
-- API local: Maven downloads dependencies during `mvn spring-boot:run` or `mvn clean package`.
+- API local: Gradle downloads dependencies during `gradle bootRun` or `gradle clean bootJar`.
 - Worker local: run `pip install -r services/worker/requirements.txt`.
 
 ## Quick Checks
@@ -65,3 +65,4 @@ python main.py
 - `services/worker/Dockerfile`: correct for worker install/run.
 - `infra/docker-compose.yml`: correct for this minimal setup.
 - `Makefile`: correct (`dev`, `down`, `logs`) and no change required.
+

@@ -3,7 +3,7 @@ FROM eclipse-temurin:21-jdk AS build
 
 WORKDIR /app
 
-ARG GRADLE_VERSION=8.10.2
+ARG GRADLE_VERSION=8.14
 RUN apt-get update \
     && apt-get install -y wget unzip \
     && wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip \

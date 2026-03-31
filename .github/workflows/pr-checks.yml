@@ -2,7 +2,7 @@ name: PR Checks
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, develop]
 
 jobs:
   # ── Detect which services changed ─────────────────────────────────────────
@@ -42,9 +42,7 @@ jobs:
       # Matches Gradle version used in the API Dockerfile
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
-          build-root-directory: services/api
-          cache-read-only: false
+          gradle-version: '8.14'
 
       - name: Compile and run tests
         run: gradle test

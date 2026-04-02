@@ -3,12 +3,12 @@ export TAG
 TAG ?= latest
 
 COMPOSE     = docker-compose -f infra/docker-compose.yml
-COMPOSE_DEV = $(COMPOSE) -f infra/docker-compose.override.yml
+COMPOSE_DEV = $(COMPOSE) -f infra/docker-compose.dev.yml
 REGISTRY    = dushyantpant
 API_IMG     = $(REGISTRY)/clipforge-api
 WORKER_IMG  = $(REGISTRY)/clipforge-worker
 
-.PHONY: dev dev-java dev-full dev-local build down logs
+.PHONY: dev dev-java dev-full dev-local build down logs migration
 
 dev:          ## Python dev: pull images for current TAG, start all (worker gets live code mount)
 	$(COMPOSE_DEV) pull
@@ -32,3 +32,6 @@ down:         ## Stop all services
 
 logs:         ## Follow logs from all services
 	$(COMPOSE) logs -f
+
+migration:    ## Create a new Flyway migration file
+	@python scripts/new_migration.py

@@ -55,11 +55,12 @@ That's it. All 4 services are now running:
 ```bash
 make dev
 ```
-Your local `services/worker/` is mounted into the container — edits are live. Restart the worker to pick up changes:
+Your local `services/worker/` is mounted into the container and `watchfiles` watches for `.py` changes — the worker restarts automatically on every save. The API runs from the latest registry image; you don't need to build it.
+
+**When you need to rebuild the worker image** (e.g. added a new dependency to `requirements.txt`):
 ```bash
-docker-compose -f infra/docker-compose.yml restart worker
+cd infra && docker compose build --no-cache worker && docker compose up -d --force-recreate worker
 ```
-The API runs from the latest registry image; you don't need to build it.
 
 ### Working on Java API only
 ```bash

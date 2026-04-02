@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  worker:
+    build:
+      context: ../services/worker
+    volumes:
+      - ../services/worker:/app
+    command: python -m watchfiles --filter python "python main.py" /app

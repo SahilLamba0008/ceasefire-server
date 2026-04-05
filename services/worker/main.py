@@ -4,7 +4,7 @@ from pipeline import ingest, transcribe, analyze, render  # noqa: F401
 
 
 def main():
-    print("Worker started...", flush=True)
+    print("Worker started...hehe", flush=True)
     while True:
         print("Polling for jobs...", flush=True)
         time.sleep(5)

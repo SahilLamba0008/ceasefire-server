@@ -10,6 +10,6 @@ public class HealthController {
 
     @GetMapping("/health")
     public String health() {
-        return "API is running";
+        return "API is running healty";
     }
 }

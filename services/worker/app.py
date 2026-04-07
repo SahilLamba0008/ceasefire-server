@@ -36,7 +36,7 @@ try:
     logger.info(f"Successfully generated segments and metadata for video_id: {video_id} {segments} {metadata}")
 except ValueError as ve:
     logger.error(f"Value error for video_id {video_id}: {str(ve)}")
-    raise HTTPException(status_code=400, detail=str(ve))
+    raise Exception(str(ve))
 except Exception as e:
-    logger.error(f"Error processing video_id {request.video_id}: {str(e)}")
-    raise HTTPException(status_code=500, detail="Internal Server Error")
+    logger.error(f"Error processing video_id {video_id}: {str(e)}")
+    raise Exception("Internal Server Error")

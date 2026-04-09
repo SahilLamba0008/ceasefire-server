@@ -1,0 +1,24 @@
+name: DB Deploy
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'services/api/src/main/resources/db/migration/**'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Flyway migrations against Neon
+        uses: docker://flyway/flyway:10
+        with:
+          args: >-
+            -url="jdbc:postgresql://${{ secrets.NEON_HOST }}/${{ secrets.NEON_DATABASE }}?sslmode=require"
+            -user=${{ secrets.NEON_USER }}
+            -password=${{ secrets.NEON_PASSWORD }}
+            -locations=filesystem:services/api/src/main/resources/db/migration
+            migrate

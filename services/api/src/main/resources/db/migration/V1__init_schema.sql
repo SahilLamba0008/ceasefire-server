@@ -3,4 +3,4 @@ CREATE TABLE IF NOT EXISTS jobs (
     status      VARCHAR(50) NOT NULL DEFAULT 'pending',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+) ;

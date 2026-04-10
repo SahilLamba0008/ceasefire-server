@@ -1,15 +1,7 @@
 # Stage 1: Build
-FROM eclipse-temurin:21-jdk AS build
+FROM gradle:8.14-jdk21 AS build
 
 WORKDIR /app
-
-ARG GRADLE_VERSION=8.14
-RUN apt-get update \
-    && apt-get install -y wget unzip \
-    && wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip \
-    && unzip -q /tmp/gradle.zip -d /opt \
-    && ln -s "/opt/gradle-${GRADLE_VERSION}/bin/gradle" /usr/bin/gradle \
-    && rm -rf /tmp/gradle.zip /var/lib/apt/lists/*
 
 COPY build.gradle settings.gradle ./
 COPY src ./src

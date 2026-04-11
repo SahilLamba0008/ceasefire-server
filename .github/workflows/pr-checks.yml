@@ -46,14 +46,14 @@ jobs:
       - uses: actions/setup-java@v4
         if: needs.detect-changes.outputs.java == 'true'
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
       # Matches Gradle version used in the API Dockerfile
       - uses: gradle/actions/setup-gradle@v4
         if: needs.detect-changes.outputs.java == 'true'
         with:
-          gradle-version: '8.14'
+          gradle-version: "8.14"
 
       - name: Compile and run tests
         if: needs.detect-changes.outputs.java == 'true'
@@ -83,8 +83,8 @@ jobs:
       - uses: actions/setup-python@v5
         if: needs.detect-changes.outputs.python == 'true'
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
           cache-dependency-path: services/worker/requirements.txt
 
       - name: Install dependencies
@@ -104,7 +104,7 @@ jobs:
       - name: Verify container starts successfully
         if: needs.detect-changes.outputs.python == 'true'
         run: |
-          docker run -d --env-file $GITHUB_WORKSPACE/.env.example --name worker-test worker-check          
+          docker run -d -e CI=true --env-file $GITHUB_WORKSPACE/.env.example --name worker-test worker-check          
           sleep 5
           if docker ps --filter name=worker-test --filter status=running | grep -q worker-test; then
             echo "Container is running"
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/setup-python@v5
         if: needs.detect-changes.outputs.db == 'true'
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Validate naming, duplicates and SQL security
         if: needs.detect-changes.outputs.db == 'true'

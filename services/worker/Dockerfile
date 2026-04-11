@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN adduser --disabled-password --gecos "" appuser
+#adding log folder
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 USER appuser
 
 CMD ["python", "app.py"]

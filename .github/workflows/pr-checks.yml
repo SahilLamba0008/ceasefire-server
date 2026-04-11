@@ -101,19 +101,13 @@ jobs:
         if: needs.detect-changes.outputs.python == 'true'
         run: docker build -t worker-check .
 
-      - name: Verify container starts successfully
+      - name: Verify worker boots (CI mode)
         if: needs.detect-changes.outputs.python == 'true'
         run: |
-          docker run -d -e CI=true --env-file $GITHUB_WORKSPACE/.env.example --name worker-test worker-check          
-          sleep 5
-          if docker ps --filter name=worker-test --filter status=running | grep -q worker-test; then
-            echo "Container is running"
-            docker stop worker-test
-          else
-            echo "Container crashed:"
-            docker logs worker-test
-            exit 1
-          fi
+          docker run \
+            -e CI=true \
+            --env-file $GITHUB_WORKSPACE/.env.example \
+            worker-check
 
   # ── Database / Migration checks ───────────────────────────────────────────
   db-checks:

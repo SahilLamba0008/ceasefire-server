@@ -104,7 +104,7 @@ jobs:
       - name: Verify container starts successfully
         if: needs.detect-changes.outputs.python == 'true'
         run: |
-          docker run -d --name worker-test worker-check
+          docker run -d --env-file .env.example --name worker-test worker-check          
           sleep 5
           if docker ps --filter name=worker-test --filter status=running | grep -q worker-test; then
             echo "Container is running"

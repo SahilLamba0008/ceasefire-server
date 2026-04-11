@@ -58,6 +58,9 @@ services:
         condition: service_healthy
     env_file:
       - ../.env
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY is required}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:?YOUTUBE_API_KEY is required}
 
 volumes:
   postgres_data:

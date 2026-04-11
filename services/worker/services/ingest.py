@@ -1,13 +1,12 @@
 from googleapiclient.discovery import build
-from config.settings import YOUTUBE_API_KEY
 import logging
 
 logger = logging.getLogger(__name__)
 
 class YouTubeMetadataService:
 
-    def __init__(self):
-        self.youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY, cache_discovery=False)
+    def __init__(self, api_key):
+        self.youtube = build('youtube', 'v3', developerKey=api_key, cache_discovery=False)
 
     def get_metadata(self, video_id):
         try:

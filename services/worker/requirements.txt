@@ -1,4 +1,7 @@
 pika
 psycopg2-binary
 python-dotenv
+youtube-transcript-api
+google-genai
 watchfiles
+google-api-python-client

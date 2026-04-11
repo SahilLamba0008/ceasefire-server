@@ -16,6 +16,7 @@ __pycache__/
 *$py.class
 venv/
 env/
+.env
 .venv/
 .pytest_cache/
 .coverage
@@ -23,6 +24,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+logs/*.log
 
 ### --- JavaScript / Node.js --- ###
 node_modules/

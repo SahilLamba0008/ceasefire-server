@@ -15,4 +15,4 @@ RUN adduser --disabled-password --gecos "" appuser
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 USER appuser
 
-CMD ["python", "app.py"]
+CMD ["python", "main.py"]

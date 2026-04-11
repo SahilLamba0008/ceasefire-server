@@ -1,4 +1,4 @@
-package com.clipforge.api.dto;
+package com.clipforge.api.dto.response;
 
 public class CreateJobResponse {
     private String jobId;

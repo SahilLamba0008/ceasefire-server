@@ -32,6 +32,7 @@ services:
 
   api:
     image: dushyantpant/clipforge-api:${TAG:-latest}
+    platform: linux/amd64
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -50,6 +51,7 @@ services:
 
   worker:
     image: dushyantpant/clipforge-worker:${TAG:-latest}
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       postgres:

@@ -1,5 +1,8 @@
 -include .docker-env
+-include .env
 export TAG
+export GEMINI_API_KEY
+export YOUTUBE_API_KEY
 TAG ?= latest
 
 COMPOSE     = docker-compose -f infra/docker-compose.yml

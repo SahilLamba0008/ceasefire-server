@@ -47,7 +47,8 @@ That's it. All 4 services are now running:
 | `make down` | Stop all services |
 | `make logs` | Follow logs from all services |
 | `make migrate-info` | Check which migrations are applied / pending (read-only, safe anytime) |
-| `make migrate` | Apply pending migrations to local DB (run after `git pull`) |
+| `make migrate` | Apply all pending migrations to local DB (run after `git pull`) |
+| `make migrate-to VERSION=N` | Apply migrations up to a specific version only |
 
 ---
 
@@ -150,6 +151,16 @@ Example output:
 ```bash
 make migrate
 ```
+
+**Applying migrations up to a specific version**
+
+If you only want to migrate up to a certain point (e.g. to test incrementally or avoid applying a migration you're not ready for):
+```bash
+make migrate-to VERSION=3
+```
+This applies `V1__`, `V2__`, `V3__` and stops — any higher versions are left as `Pending`. The `VERSION` matches the number in your migration filename prefix (`V{VERSION}__description.sql`).
+
+Run `make migrate-info` first to see the available version numbers.
 
 > **Note:** You may see the following warnings in the output — these are harmless and can be ignored:
 > ```

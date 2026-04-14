@@ -46,6 +46,8 @@ That's it. All 4 services are now running:
 | `make build` | Build images locally (tagged `:local`, never touches registry `:latest`) |
 | `make down` | Stop all services |
 | `make logs` | Follow logs from all services |
+| `make migrate-info` | Check which migrations are applied / pending (read-only, safe anytime) |
+| `make migrate` | Apply pending migrations to local DB (run after `git pull`) |
 
 ---
 
@@ -114,6 +116,47 @@ Then `make dev` will pull and run that exact build. Switch back to `TAG=latest` 
 Images are only updated via CI/CD when a Pull Request is approved and merged into the `develop` branch. When you run `make dev`, it pulls whichever tag is set in `.docker-env` (default: `latest`).
 
 If you notice your changes aren't reflected after `make dev`, check that your PR has been merged.
+
+---
+
+## Running Migrations After `git pull`
+
+When you pull changes that include new migration scripts, apply them to your local DB before running the API.
+
+**Step 1 — Make sure Postgres is running**
+```bash
+make dev-java
+# or just the DB container alone:
+docker-compose --env-file .env -f infra/docker-compose.yml up postgres
+```
+
+**Step 2 — Check what's pending (read-only, no DB changes)**
+```bash
+make migrate-info
+```
+Example output:
+```
++-----------+---------+---------------------+------+---------------------+---------+
+| Category  | Version | Description         | Type | Installed On        | State   |
++-----------+---------+---------------------+------+---------------------+---------+
+| Versioned | 1       | init schema         | SQL  | 2026-04-10 12:00:00 | Success |
+| Versioned | 2       | add users table     | SQL  |                     | Pending |
++-----------+---------+---------------------+------+---------------------+---------+
+```
+- `Success` — already applied, will not be touched
+- `Pending` — will be applied by `make migrate`
+
+**Step 3 — Apply pending migrations**
+```bash
+make migrate
+```
+
+> **Note:** You may see the following warnings in the output — these are harmless and can be ignored:
+> ```
+> WARNING: Storing migrations in 'sql' is not recommended...
+> A more recent version of Flyway is available...
+> ```
+> The first is a deprecation notice for a future Flyway release (not yet in effect). The second is just an upgrade nudge. Neither affects functionality.
 
 ---
 

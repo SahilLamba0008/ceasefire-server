@@ -28,7 +28,7 @@ dev-local-windows: build  ## Integration test: build :local images and start all
 	set TAG=local&& $(COMPOSE) up
 
 dev-local-linux: build  ## Integration test: build :local images and start all services in Docker (no mounts)	
-set TAG=local $(COMPOSE) up
+	set TAG=local $(COMPOSE) up
 
 down:         ## Stop all services
 	$(COMPOSE) down

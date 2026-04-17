@@ -48,3 +48,7 @@ gradle bootRun
 ```
 .\gradlew build
 ```
+## Run DB migration
+```
+make migration
+```

@@ -24,8 +24,11 @@ build:        ## Build images locally (tagged :local — registry :latest is nev
 	docker build -t $(API_IMG):local services/api
 	docker build -t $(WORKER_IMG):local services/worker
 
-dev-local: build  ## Integration test: build :local images and start all services in Docker (no mounts)
+dev-local-windows: build  ## Integration test: build :local images and start all services in Docker (no mounts)
 	set TAG=local&& $(COMPOSE) up
+
+dev-local-linux: build  ## Integration test: build :local images and start all services in Docker (no mounts)	
+set TAG=local $(COMPOSE) up
 
 down:         ## Stop all services
 	$(COMPOSE) down

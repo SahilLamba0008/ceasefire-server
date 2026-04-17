@@ -25,6 +25,9 @@ public class Job {
     @Column(name = "description", nullable = false)
     private String description;
 
+    @Column(name = "status", nullable = false)
+    private String status;
+
     @Column(name = "youtube_url", nullable = false)
     private String youtubeUrl;
 
@@ -58,6 +61,14 @@ public class Job {
         this.description = description;
     }
 
+    public String getStatus() {
+        return status;
+    }
+    
+    public void setStatus(String status) {
+        this.status = status;
+    }
+    
     public String getYoutubeUrl() {
         return youtubeUrl;
     }
@@ -65,7 +76,6 @@ public class Job {
     public void setYoutubeUrl(String youtubeUrl) {
         this.youtubeUrl = youtubeUrl;
     }
-
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }

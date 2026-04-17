@@ -1,34 +1,24 @@
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'jobs'
-          AND column_name = 'id'
-    ) THEN
-        ALTER TABLE public.jobs RENAME COLUMN id TO job_id;
-    END IF;
-END
-$$;
+-- 1. Rename id -> job_id to align with Job entity mapping
+ALTER TABLE jobs RENAME COLUMN id TO job_id;
 
-ALTER TABLE public.jobs
-    ADD COLUMN IF NOT EXISTS title TEXT,
-    ADD COLUMN IF NOT EXISTS description TEXT,
-    ADD COLUMN IF NOT EXISTS youtube_url TEXT;
+-- 2. Remove DB-side UUID default (Hibernate generates UUIDs)
+ALTER TABLE jobs ALTER COLUMN job_id DROP DEFAULT;
 
-UPDATE public.jobs
-SET title = COALESCE(title, 'Untitled'),
-    description = COALESCE(description, ''),
-    youtube_url = COALESCE(youtube_url, '')
-WHERE title IS NULL OR description IS NULL OR youtube_url IS NULL;
+-- 3. Add payload columns used by the API
+ALTER TABLE jobs
+    ADD COLUMN title TEXT NOT NULL DEFAULT 'Untitled',
+    ADD COLUMN description TEXT NOT NULL DEFAULT '',
+    ADD COLUMN youtube_url TEXT NOT NULL DEFAULT '';
 
-ALTER TABLE public.jobs
-    ALTER COLUMN title SET NOT NULL,
-    ALTER COLUMN description SET NOT NULL,
-    ALTER COLUMN youtube_url SET NOT NULL;
+-- 4. Normalize existing status values
+UPDATE jobs SET status = UPPER(status);
 
-CREATE OR REPLACE FUNCTION public.jobs_set_updated_at()
+-- 5. Match DB default status with backend convention
+ALTER TABLE jobs
+    ALTER COLUMN status SET DEFAULT 'PENDING';
+
+-- 6. Ensure updated_at auto-updates on row updates
+CREATE OR REPLACE FUNCTION jobs_set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = now();
@@ -36,9 +26,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_jobs_set_updated_at ON public.jobs;
+DROP TRIGGER IF EXISTS trg_jobs_set_updated_at ON jobs;
 
 CREATE TRIGGER trg_jobs_set_updated_at
-BEFORE UPDATE ON public.jobs
+BEFORE UPDATE ON jobs
 FOR EACH ROW
-EXECUTE FUNCTION public.jobs_set_updated_at();
+EXECUTE FUNCTION jobs_set_updated_at();

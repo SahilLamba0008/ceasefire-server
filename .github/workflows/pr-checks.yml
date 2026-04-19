@@ -151,7 +151,7 @@ jobs:
         if: needs.detect-changes.outputs.db == 'true'
         run: |
           git fetch origin ${{ github.base_ref }} --depth=1
-          MODIFIED=$(git diff --name-only --diff-filter=M origin/${{ github.base_ref }}...HEAD \
+          MODIFIED=$(git diff --name-only --diff-filter=M origin/${{ github.base_ref }}..HEAD \
             -- 'services/api/src/main/resources/db/migration/')
           if [ -n "$MODIFIED" ]; then
             echo "ERROR: The following already-applied migration files were modified:"

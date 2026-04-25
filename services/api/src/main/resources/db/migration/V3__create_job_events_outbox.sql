@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS events.job_events (
 
     max_retries INTEGER NOT NULL DEFAULT 5,
 
-    locked_by VARCHAR(100),
+    locked_by VARCHAR(100) NOT NULL,
 
     locked_at TIMESTAMPTZ,
 
@@ -62,13 +62,7 @@ CREATE TABLE IF NOT EXISTS events.job_events (
         CHECK (retry_count >= 0),
 
     CONSTRAINT job_events_max_retries_check
-        CHECK (max_retries >= 0),
-
-    CONSTRAINT job_events_lock_owner_check
-        CHECK (
-            status <> 'PROCESSING'
-            OR locked_by IS NOT NULL
-        )
+        CHECK (max_retries >= 0)
 );
 
 
@@ -97,6 +91,7 @@ BEFORE UPDATE ON events.job_events
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
+DROP FUNCTION IF EXISTS jobs_set_updated_at();
 
 CREATE OR REPLACE FUNCTION events.poll_job_events(
     p_batch_size INTEGER,

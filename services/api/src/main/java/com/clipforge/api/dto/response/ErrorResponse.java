@@ -1,6 +1,7 @@
 package com.clipforge.api.dto.response;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 public class ErrorResponse {
 
@@ -11,7 +12,7 @@ public class ErrorResponse {
     public ErrorResponse(String message, String errorCode) {
         this.message = message;
         this.errorCode = errorCode;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = LocalDateTime.now(ZoneOffset.UTC);
     }
 
     public String getMessage() {

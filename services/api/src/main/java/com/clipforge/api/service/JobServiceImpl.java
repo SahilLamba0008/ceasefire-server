@@ -2,6 +2,7 @@ package com.clipforge.api.service;
 
 import com.clipforge.api.dto.request.CreateJobRequest;
 import com.clipforge.api.entity.Job;
+import com.clipforge.api.exception.JobCreationException;
 import com.clipforge.api.repository.JobRepository;
 
 import org.slf4j.Logger;
@@ -33,7 +34,12 @@ public class JobServiceImpl implements JobService {
         job.setDescription(description);
         job.setYoutubeUrl(youtubeUrl);
         job.setStatus(status);
-        Job savedJob = jobRepository.save(job);
+        Job savedJob;
+        try {
+            savedJob = jobRepository.save(job);
+        } catch (Exception e) {
+            throw new JobCreationException("Failed to create job", e);
+        }
         String savedJobId = savedJob.getJobId().toString();
 
         log.info(

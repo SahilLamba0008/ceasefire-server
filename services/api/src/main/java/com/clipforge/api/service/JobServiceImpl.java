@@ -3,7 +3,8 @@ package com.clipforge.api.service;
 import com.clipforge.api.dto.request.CreateJobRequest;
 import com.clipforge.api.entity.Job;
 import com.clipforge.api.entity.JobEvent;
-import com.clipforge.api.outbox.OutboxEventPublisher;
+import com.clipforge.api.exception.JobCreationException;
+import com.clipforge.api.outbox.JobOutboxEventPublisher;
 import com.clipforge.api.repository.JobRepository;
 
 import org.slf4j.Logger;
@@ -17,11 +18,11 @@ public class JobServiceImpl implements JobService {
     private static final String JOB_STATUS_PENDING = JobEvent.EventStatus.PENDING.name();
 
     private final JobRepository jobRepository;
-    private final OutboxEventPublisher outboxEventPublisher;
+    private final JobOutboxEventPublisher jobOutboxEventPublisher;
 
-    public JobServiceImpl(JobRepository jobRepository, OutboxEventPublisher outboxEventPublisher) {
+    public JobServiceImpl(JobRepository jobRepository, JobOutboxEventPublisher jobOutboxEventPublisher) {
         this.jobRepository = jobRepository;
-        this.outboxEventPublisher = outboxEventPublisher;
+        this.jobOutboxEventPublisher = jobOutboxEventPublisher;
     }
 
     @Override
@@ -39,9 +40,15 @@ public class JobServiceImpl implements JobService {
         job.setDescription(description);
         job.setYoutubeUrl(youtubeUrl);
         job.setStatus(status);
-        Job savedJob = jobRepository.save(job);
 
-        outboxEventPublisher.publishJobCreated(savedJob);
+        Job savedJob;
+        try {
+            savedJob = jobRepository.save(job);
+        } catch (Exception e) {
+            throw new JobCreationException("Failed to create job", e);
+        }
+
+        jobOutboxEventPublisher.publishJobCreated(savedJob);
 
         String savedJobId = savedJob.getJobId().toString();
 

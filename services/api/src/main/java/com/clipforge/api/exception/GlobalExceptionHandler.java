@@ -18,18 +18,15 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(JobNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleJobNotFound(JobNotFoundException ex) {
-        log.warn("Job not found: {}", ex.getMessage());
-        ErrorResponse errorResponse = new ErrorResponse(ex.getMessage(), "JOB_NOT_FOUND");
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
-    }
-
-    @ExceptionHandler(JobCreationException.class)
-    public ResponseEntity<ErrorResponse> handleJobCreationException(JobCreationException ex) {
-        log.error("Job creation failed: {}", ex.getMessage(), ex);
-        ErrorResponse errorResponse = new ErrorResponse(ex.getMessage(), "JOB_CREATION_FAILED");
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ErrorResponse> handleApiException(ApiException ex) {
+        if (ex.getStatus().is5xxServerError()) {
+            log.error(ex.getMessage(), ex);
+        } else {
+            log.warn(ex.getMessage());
+        }
+        ErrorResponse errorResponse = new ErrorResponse(ex.getMessage(), ex.getErrorCode());
+        return ResponseEntity.status(ex.getStatus()).body(errorResponse);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

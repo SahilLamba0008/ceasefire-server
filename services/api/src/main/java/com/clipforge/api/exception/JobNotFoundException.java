@@ -1,12 +1,9 @@
 package com.clipforge.api.exception;
+import org.springframework.http.HttpStatus;
 
 public class JobNotFoundException extends ApiException {
 
-    public JobNotFoundException(String message) {
-        super(message);
-    }
-
-    public JobNotFoundException(String message, Throwable cause) {
-        super(message, cause);
+     public JobNotFoundException(String jobId) {
+        super("Job not found with id: " + jobId, HttpStatus.NOT_FOUND, "JOB_NOT_FOUND");
     }
 }

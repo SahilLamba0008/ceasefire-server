@@ -49,6 +49,23 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_RABBITMQ_HOST: rabbitmq
 
+  outbox-worker:
+    image: dushyantpant/clipforge-outbox-worker:${TAG:-latest}
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/clipforge
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_RABBITMQ_HOST: rabbitmq
+
   worker:
     image: dushyantpant/clipforge-worker:${TAG:-latest}
     platform: linux/amd64

@@ -3,7 +3,7 @@ package com.clipforge.outboxworker.model;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-public class JobEvent {
+public class JobEvent implements IOutboxEvent {
 
     private UUID id;
     private String eventType;

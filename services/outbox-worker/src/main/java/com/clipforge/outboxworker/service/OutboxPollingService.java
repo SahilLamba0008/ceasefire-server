@@ -1,43 +1,39 @@
 package com.clipforge.outboxworker.service;
 
 import com.clipforge.outboxworker.config.OutboxProperties;
-import com.clipforge.outboxworker.model.JobEvent;
-import com.clipforge.outboxworker.model.JobEventRowMapper;
+import com.clipforge.outboxworker.model.IOutboxEvent;
 import com.clipforge.outboxworker.publisher.IEventPublisher;
+import com.clipforge.outboxworker.repository.IOutboxEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.dao.DataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.UUID;
 
-@Service
-public class OutboxPollingService implements SmartLifecycle {
+public abstract class OutboxPollingService<T extends IOutboxEvent> implements SmartLifecycle {
 
-    private static final Logger log = LoggerFactory.getLogger(OutboxPollingService.class);
-    private static final JobEventRowMapper ROW_MAPPER = new JobEventRowMapper();
+    protected static final Logger log = LoggerFactory.getLogger(OutboxPollingService.class);
 
-    private final JdbcTemplate jdbc;
     private final RabbitTemplate rabbit;
-    private final IEventPublisher publisher;
+    private final IEventPublisher<T> publisher;
+    private final IOutboxEventRepository<T> repository;
     private final OutboxProperties props;
     private final String workerId;
 
     private volatile boolean running = false;
     private Thread pollingThread;
 
-    public OutboxPollingService(JdbcTemplate jdbc, RabbitTemplate rabbit,
-                                IEventPublisher publisher, OutboxProperties props) {
-        this.jdbc = jdbc;
+    protected OutboxPollingService(RabbitTemplate rabbit, IEventPublisher<T> publisher,
+                                   IOutboxEventRepository<T> repository, OutboxProperties props) {
         this.rabbit = rabbit;
         this.publisher = publisher;
+        this.repository = repository;
         this.props = props;
         this.workerId = buildWorkerId();
     }
@@ -45,7 +41,7 @@ public class OutboxPollingService implements SmartLifecycle {
     @Override
     public void start() {
         running = true;
-        pollingThread = new Thread(this::runLoop, "outbox-poller");
+        pollingThread = new Thread(this::runPollingLoop, threadName());
         pollingThread.setDaemon(false);
         pollingThread.start();
     }
@@ -75,16 +71,17 @@ public class OutboxPollingService implements SmartLifecycle {
         return running;
     }
 
-    private void runLoop() {
-        waitForDb();
+    protected abstract String threadName();
+
+    private void runPollingLoop() {
         waitForRabbitMQ();
         log.info("Outbox worker ready [workerId={}]", workerId);
 
         while (running) {
             try {
-                releaseStaleLeases();
-                List<JobEvent> events = pollEvents();
-                for (JobEvent event : events) {
+                repository.releaseStaleLeases(props.getStaleLeasetimeoutSeconds());
+                List<T> events = repository.pollEvents(props.getBatchSize(), workerId);
+                for (T event : events) {
                     if (!running) break;
                     processEvent(event);
                 }
@@ -96,10 +93,6 @@ public class OutboxPollingService implements SmartLifecycle {
 
             sleep(props.getPollIntervalMs());
         }
-    }
-
-    private void waitForDb() {
-        waitForConnection("database", () -> jdbc.queryForObject("SELECT 1", Integer.class));
     }
 
     private void waitForRabbitMQ() {
@@ -122,77 +115,28 @@ public class OutboxPollingService implements SmartLifecycle {
         }
     }
 
-    private List<JobEvent> pollEvents() {
-        return jdbc.query(
-            "SELECT * FROM events.poll_job_events(?, ?)",
-            ROW_MAPPER,
-            props.getBatchSize(),
-            workerId
-        );
-    }
-
-    private void processEvent(JobEvent event) {
+    private void processEvent(T event) {
         try {
             publisher.publish(event, props.getExchange());
-            markProcessed(event.getId());
+            repository.markProcessed(event.getId());
         } catch (AmqpException | DataAccessException e) {
             handleFailure(event, e);
         }
     }
 
-    private void markProcessed(UUID eventId) {
-        jdbc.update("""
-            UPDATE events.job_events
-            SET status = 'PROCESSED', processed_at = now(), locked_by = NULL, locked_at = NULL
-            WHERE id = ?
-            """, eventId);
-    }
-
-    private void handleFailure(JobEvent event, Exception e) {
+    private void handleFailure(T event, Exception e) {
         int nextRetryCount = event.getRetryCount() + 1;
         String errorMsg = truncate(e.getMessage(), 1000);
 
         if (nextRetryCount >= event.getMaxRetries()) {
-            jdbc.update("""
-                UPDATE events.job_events
-                SET status = 'FAILED', retry_count = ?, last_error = ?, locked_by = NULL, locked_at = NULL
-                WHERE id = ?
-                """, nextRetryCount, errorMsg, event.getId());
+            repository.markFailed(event.getId(), nextRetryCount, errorMsg);
             log.error("Event {} permanently failed after {} retries: {}", event.getId(), nextRetryCount, e.getMessage());
         } else {
             long backoffSeconds = (long) Math.pow(2, nextRetryCount);
-            jdbc.update("""
-                UPDATE events.job_events
-                SET status = 'PENDING', retry_count = ?,
-                    available_at = now() + (? * interval '1 second'),
-                    last_error = ?, locked_by = NULL, locked_at = NULL
-                WHERE id = ?
-                """, nextRetryCount, backoffSeconds, errorMsg, event.getId());
+            repository.reschedule(event.getId(), nextRetryCount, backoffSeconds, errorMsg);
             log.warn("Event {} failed, retry {}/{} scheduled in {}s",
                 event.getId(), nextRetryCount, event.getMaxRetries(), backoffSeconds);
         }
-    }
-
-    private void releaseStaleLeases() {
-        int reset = jdbc.update("""
-            UPDATE events.job_events
-            SET status = 'PENDING', locked_by = NULL, locked_at = NULL
-            WHERE status = 'PROCESSING'
-              AND locked_at < now() - (? * interval '1 second')
-              AND retry_count < max_retries
-            """, props.getStaleLeasetimeoutSeconds());
-
-        int failed = jdbc.update("""
-            UPDATE events.job_events
-            SET status = 'FAILED', locked_by = NULL, locked_at = NULL,
-                last_error = 'Stale lease: processing timed out'
-            WHERE status = 'PROCESSING'
-              AND locked_at < now() - (? * interval '1 second')
-              AND retry_count >= max_retries
-            """, props.getStaleLeasetimeoutSeconds());
-
-        if (reset > 0) log.info("Released {} stale lease(s) back to PENDING", reset);
-        if (failed > 0) log.warn("Marked {} stale lease(s) as FAILED (max retries exhausted)", failed);
     }
 
     private long backoff(int attempt) {

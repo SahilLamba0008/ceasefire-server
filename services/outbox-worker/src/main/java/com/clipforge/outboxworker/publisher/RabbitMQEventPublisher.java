@@ -1,7 +1,7 @@
 package com.clipforge.outboxworker.publisher;
 
 import com.clipforge.outboxworker.config.OutboxProperties;
-import com.clipforge.outboxworker.model.JobEvent;
+import com.clipforge.outboxworker.model.IOutboxEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -15,7 +15,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.nio.charset.StandardCharsets;
 
-public abstract class RabbitMQEventPublisher implements IEventPublisher {
+public abstract class RabbitMQEventPublisher<T extends IOutboxEvent> implements IEventPublisher<T> {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitMQEventPublisher.class);
 
@@ -30,7 +30,7 @@ public abstract class RabbitMQEventPublisher implements IEventPublisher {
     }
 
     @Override
-    public final void publish(JobEvent event, String exchange) {
+    public final void publish(T event, String exchange) {
         JsonNode parsedPayload = parsePayload(event);
         String eventId = extractEventId(event, parsedPayload);
         String body = buildMessageBody(event, parsedPayload);
@@ -53,9 +53,9 @@ public abstract class RabbitMQEventPublisher implements IEventPublisher {
         log.debug("Broker confirmed event [id={}, type={}, routingKey={}]", eventId, event.getEventType(), routingKey);
     }
 
-    protected abstract String buildMessageBody(JobEvent event, JsonNode parsedPayload);
+    protected abstract String buildMessageBody(T event, JsonNode parsedPayload);
 
-    protected String extractEventId(JobEvent event, JsonNode parsedPayload) {
+    protected String extractEventId(T event, JsonNode parsedPayload) {
         JsonNode node = parsedPayload.get("event_id");
         if (node != null && !node.isNull()) return node.asText();
         return event.getId().toString();
@@ -65,7 +65,7 @@ public abstract class RabbitMQEventPublisher implements IEventPublisher {
         return eventType.toLowerCase().replace('_', '.');
     }
 
-    private JsonNode parsePayload(JobEvent event) {
+    private JsonNode parsePayload(T event) {
         try {
             return objectMapper.readTree(event.getPayload());
         } catch (Exception e) {

@@ -1,7 +1,7 @@
 package com.clipforge.outboxworker.publisher;
 
-import com.clipforge.outboxworker.model.JobEvent;
+import com.clipforge.outboxworker.model.IOutboxEvent;
 
-public interface IEventPublisher {
-    void publish(JobEvent event, String exchange);
+public interface IEventPublisher<T extends IOutboxEvent> {
+    void publish(T event, String exchange);
 }

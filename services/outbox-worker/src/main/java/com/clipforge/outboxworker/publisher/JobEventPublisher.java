@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 
 @Component
-public class JobEventPublisher extends RabbitMQEventPublisher {
+public class JobEventPublisher extends RabbitMQEventPublisher<JobEvent> {
 
     public JobEventPublisher(RabbitTemplate rabbit, ObjectMapper objectMapper, OutboxProperties props) {
         super(rabbit, objectMapper, props);

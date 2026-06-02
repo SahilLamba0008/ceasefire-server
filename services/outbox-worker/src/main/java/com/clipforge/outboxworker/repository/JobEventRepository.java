@@ -1,12 +1,16 @@
 package com.clipforge.outboxworker.repository;
 
 import com.clipforge.outboxworker.model.JobEvent;
-import com.clipforge.outboxworker.model.JobEventRowMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Timestamp;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,21 +18,32 @@ import java.util.UUID;
 public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
 
     private static final Logger log = LoggerFactory.getLogger(JobEventRepository.class);
-    private static final JobEventRowMapper ROW_MAPPER = new JobEventRowMapper();
 
-    private final JdbcTemplate jdbc;
+    private static final RowMapper<JobEvent> ROW_MAPPER = (rs, rowNum) -> {
+        JobEvent event = new JobEvent();
+        event.setId(rs.getObject("id", UUID.class));
+        event.setEventType(rs.getString("event_type"));
+        event.setPayload(rs.getString("payload"));
+        event.setRetryCount(rs.getInt("retry_count"));
+        event.setMaxRetries(rs.getInt("max_retries"));
+        event.setCreatedAt(toOffsetDateTime(rs.getTimestamp("created_at")));
+        return event;
+    };
 
-    public JobEventRepository(JdbcTemplate jdbc) {
+    private final NamedParameterJdbcTemplate jdbc;
+
+    public JobEventRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
     @Override
     public List<JobEvent> pollEvents(int batchSize, String workerId) {
         return jdbc.query(
-            "SELECT * FROM events.poll_job_events(?, ?)",
-            ROW_MAPPER,
-            batchSize,
-            workerId
+            "SELECT * FROM events.poll_job_events(:batchSize, :workerId)",
+            new MapSqlParameterSource()
+                .addValue("batchSize", batchSize)
+                .addValue("workerId", workerId),
+            ROW_MAPPER
         );
     }
 
@@ -37,28 +52,42 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
         jdbc.update("""
             UPDATE events.job_events
             SET status = 'PROCESSED', processed_at = now(), locked_by = NULL, locked_at = NULL
-            WHERE id = ?
-            """, eventId);
+            WHERE id = :id
+            """,
+            new MapSqlParameterSource("id", eventId)
+        );
     }
 
     @Override
     public void markFailed(UUID eventId, int retryCount, String error) {
         jdbc.update("""
             UPDATE events.job_events
-            SET status = 'FAILED', retry_count = ?, last_error = ?, locked_by = NULL, locked_at = NULL
-            WHERE id = ?
-            """, retryCount, error, eventId);
+            SET status = 'FAILED', retry_count = :retryCount, last_error = :error,
+                locked_by = NULL, locked_at = NULL
+            WHERE id = :id
+            """,
+            new MapSqlParameterSource()
+                .addValue("retryCount", retryCount)
+                .addValue("error", error)
+                .addValue("id", eventId)
+        );
     }
 
     @Override
     public void reschedule(UUID eventId, int retryCount, long backoffSeconds, String error) {
         jdbc.update("""
             UPDATE events.job_events
-            SET status = 'PENDING', retry_count = ?,
-                available_at = now() + (? * interval '1 second'),
-                last_error = ?, locked_by = NULL, locked_at = NULL
-            WHERE id = ?
-            """, retryCount, backoffSeconds, error, eventId);
+            SET status = 'PENDING', retry_count = :retryCount,
+                available_at = now() + (:backoffSeconds * interval '1 second'),
+                last_error = :error, locked_by = NULL, locked_at = NULL
+            WHERE id = :id
+            """,
+            new MapSqlParameterSource()
+                .addValue("retryCount", retryCount)
+                .addValue("backoffSeconds", backoffSeconds)
+                .addValue("error", error)
+                .addValue("id", eventId)
+        );
     }
 
     @Override
@@ -67,20 +96,29 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
             UPDATE events.job_events
             SET status = 'PENDING', locked_by = NULL, locked_at = NULL
             WHERE status = 'PROCESSING'
-              AND locked_at < now() - (? * interval '1 second')
+              AND locked_at < now() - (:timeoutSeconds * interval '1 second')
               AND retry_count < max_retries
-            """, timeoutSeconds);
+            """,
+            new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
+        );
 
         int failed = jdbc.update("""
             UPDATE events.job_events
             SET status = 'FAILED', locked_by = NULL, locked_at = NULL,
                 last_error = 'Stale lease: processing timed out'
             WHERE status = 'PROCESSING'
-              AND locked_at < now() - (? * interval '1 second')
+              AND locked_at < now() - (:timeoutSeconds * interval '1 second')
               AND retry_count >= max_retries
-            """, timeoutSeconds);
+            """,
+            new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
+        );
 
         if (reset > 0) log.info("Released {} stale lease(s) back to PENDING", reset);
         if (failed > 0) log.warn("Marked {} stale lease(s) as FAILED (max retries exhausted)", failed);
+    }
+
+    private static OffsetDateTime toOffsetDateTime(Timestamp ts) {
+        if (ts == null) return null;
+        return ts.toInstant().atOffset(ZoneOffset.UTC);
     }
 }

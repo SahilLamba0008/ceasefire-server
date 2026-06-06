@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       java: ${{ steps.filter.outputs.java }}
+      outbox-worker: ${{ steps.filter.outputs.outbox-worker }}
       python: ${{ steps.filter.outputs.python }}
       db: ${{ steps.filter.outputs.db }}
     steps:
@@ -21,6 +22,8 @@ jobs:
             java:
               - 'services/api/**'
               - '!services/api/src/main/resources/db/migration/**'
+            outbox-worker:
+              - 'services/outbox-worker/**'
             python:
               - 'services/worker/**'
             db:
@@ -61,6 +64,33 @@ jobs:
 
       - name: Docker build check
         if: needs.detect-changes.outputs.java == 'true'
+        run: docker build .
+
+  # ── Outbox Worker checks ───────────────────────────────────────────────────
+  outbox-worker-checks:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.outbox-worker == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/outbox-worker
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
+
+      - name: Compile and run tests
+        run: gradle test
+
+      - name: Docker build check
         run: docker build .
 
   # ── Python / Worker checks ─────────────────────────────────────────────────

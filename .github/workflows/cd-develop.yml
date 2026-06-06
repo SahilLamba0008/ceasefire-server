@@ -11,6 +11,7 @@ jobs:
     outputs:
       api: ${{ steps.filter.outputs.api }}
       worker: ${{ steps.filter.outputs.worker }}
+      outbox-worker: ${{ steps.filter.outputs.outbox-worker }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -21,6 +22,8 @@ jobs:
               - 'services/api/**'
             worker:
               - 'services/worker/**'
+            outbox-worker:
+              - 'services/outbox-worker/**'
 
   # ── Build & push API image ─────────────────────────────────────────────────
   build-push-api:
@@ -52,6 +55,39 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/clipforge-api:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/clipforge-api:${{ steps.sha.outputs.short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Build & push Outbox Worker image ──────────────────────────────────────
+  build-push-outbox-worker:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.outbox-worker == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: services/outbox-worker
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/clipforge-outbox-worker:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/clipforge-outbox-worker:${{ steps.sha.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

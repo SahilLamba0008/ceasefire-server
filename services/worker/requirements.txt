@@ -5,3 +5,4 @@ youtube-transcript-api
 google-genai
 watchfiles
 google-api-python-client
+sqlalchemy

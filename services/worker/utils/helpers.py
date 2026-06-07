@@ -1,4 +1,7 @@
 import json
+import re
+import logging
+logger = logging.getLogger(__name__)
 
 # Convert transcript to readable text
 def format_transcript(transcript):
@@ -9,9 +12,45 @@ def format_transcript(transcript):
         text += f"[{start:.2f}] {content}\n"
     return text
 
-def parse_segments(json_str):
+def parse_segments(result):
     try:
+
+        # remove markdown code block
+        json_str = result.strip()
+
+        json_str = re.sub(
+            r"^```json",
+            "",
+            json_str
+        )
+
+        json_str = re.sub(
+            r"^```",
+            "",
+            json_str
+        )
+
+        json_str = re.sub(
+            r"```$",
+            "",
+            json_str
+        )
+
+
+        json_str = json_str.strip()
+
+
         segments = json.loads(json_str)
+
+
         return segments
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON format: {str(e)}")
+
+    except Exception as e:
+
+        logger.error(
+            f"Error parsing segments: {e}"
+        )
+
+        raise ValueError(
+            f"Invalid JSON format: {str(e)}"
+        )

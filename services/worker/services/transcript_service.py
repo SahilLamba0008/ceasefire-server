@@ -35,3 +35,12 @@ def get_transcript(video_id):
         raise TranscriptFetchError(
             f"Failed to fetch transcript for video {video_id}: {str(e)}"
         ) from e
+
+
+def format_transcript(transcript):
+    text = ""
+    for entry in transcript:
+        start = entry["start"]
+        content = entry["text"]
+        text += f"[{start:.2f}] {content}\n"
+    return text

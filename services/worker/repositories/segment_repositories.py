@@ -1,6 +1,8 @@
 import logging
 import uuid
 
+from exceptions import PersistenceError
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +47,7 @@ class SegmentRepository:
 
             logger.error(f"DB insert failed {e}")
 
-            raise
+            raise PersistenceError(f"Failed to save segments: {str(e)}") from e
 
         finally:
             if cursor:

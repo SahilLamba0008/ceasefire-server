@@ -2,6 +2,8 @@ import json
 import logging
 import re
 
+from exceptions import SegmentParsingError
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,4 +37,4 @@ def parse_segments(result):
     except Exception as e:
         logger.error(f"Error parsing segments: {e}")
 
-        raise ValueError(f"Invalid JSON format: {str(e)}")
+        raise SegmentParsingError(f"Invalid JSON format: {str(e)}") from e

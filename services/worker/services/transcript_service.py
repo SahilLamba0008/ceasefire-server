@@ -2,6 +2,8 @@ import logging
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
+from exceptions import TranscriptFetchError
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,4 +32,6 @@ def get_transcript(video_id):
         return transcript.to_raw_data()
     except Exception as e:
         logger.error(f"Error fetching transcript for video {video_id}: {e}")
-        raise Exception(f"Failed to fetch transcript for video {video_id}: {str(e)}")
+        raise TranscriptFetchError(
+            f"Failed to fetch transcript for video {video_id}: {str(e)}"
+        ) from e

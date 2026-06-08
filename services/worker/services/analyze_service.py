@@ -2,6 +2,8 @@ import logging
 
 from google import genai
 
+from exceptions import SegmentGenerationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,9 +84,12 @@ class AnalyzeService:
 
                     continue
 
-            raise Exception(f"All Gemini models failed: {last_error}")
+            raise SegmentGenerationError(f"All Gemini models failed: {last_error}") from last_error
+
+        except SegmentGenerationError:
+            raise
 
         except Exception as e:
             logger.error(f"Error generating segments: {e}")
 
-            raise Exception(f"Failed to generate segments: {str(e)}")
+            raise SegmentGenerationError(f"Failed to generate segments: {str(e)}") from e

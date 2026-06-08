@@ -2,6 +2,8 @@ import logging
 
 from googleapiclient.discovery import build
 
+from exceptions import MetadataFetchError
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ class YouTubeMetadataService:
             )
             response = request.execute()
             if not response["items"]:
-                raise ValueError(f"No video found with ID: {video_id}")
+                raise MetadataFetchError(f"No video found with ID: {video_id}")
             data = {
                 "title": response["items"][0]["snippet"]["title"],
                 "channelTitle": response["items"][0]["snippet"]["channelTitle"],
@@ -26,6 +28,10 @@ class YouTubeMetadataService:
                 "duration": response["items"][0]["contentDetails"]["duration"],
             }
             return data
+        except MetadataFetchError:
+            raise
         except Exception as e:
             logger.error(f"Error fetching metadata for video_id {video_id}: {str(e)}")
-            raise Exception(f"Failed to fetch metadata: {str(e)} for video_id: {video_id}")
+            raise MetadataFetchError(
+                f"Failed to fetch metadata: {str(e)} for video_id: {video_id}"
+            ) from e

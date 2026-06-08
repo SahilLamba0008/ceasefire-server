@@ -3,6 +3,7 @@ import os
 
 from config.database import get_connection
 from config.settings import GEMINI_API_KEY, YOUTUBE_API_KEY
+from exceptions import WorkerError
 from services.analyze_service import AnalyzeService
 from services.ingest import YouTubeMetadataService
 from services.segment_service import SegmentService
@@ -75,15 +76,15 @@ def main():
         logger.info(response)
         print(response)
 
-    except ValueError as ve:
-        logger.error(f"Value error for video_id {video_id}: {str(ve)}")
+    except WorkerError as we:
+        logger.error(f"Worker error for video_id {video_id}: {str(we)}")
 
-        raise Exception(str(ve))
+        raise
 
     except Exception as e:
-        logger.error(f"Error processing video_id {video_id}: {str(e)}")
+        logger.error(f"Unexpected error processing video_id {video_id}: {str(e)}")
 
-        raise Exception("Internal Server Error")
+        raise
 
     finally:
         if db:

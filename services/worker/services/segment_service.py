@@ -1,5 +1,6 @@
 import logging
 
+from exceptions import SegmentValidationError
 from repositories.segment_repositories import SegmentRepository
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ class SegmentService:
             end_time = segment["end"]
 
             if start_time >= end_time:
-                raise ValueError(
+                raise SegmentValidationError(
                     f"Invalid segment time: start {start_time} must be less than end {end_time}"
                 )
 

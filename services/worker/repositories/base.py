@@ -26,17 +26,14 @@ class BaseRepository:
 
             logger.error(f"{error_msg}: {e}")
 
-            raise (error_cls or self.error_cls)(
-                f"{error_msg}: {str(e)}") from e
+            raise (error_cls or self.error_cls)(f"{error_msg}: {str(e)}") from e
 
         finally:
             if cursor:
                 cursor.close()
 
     def _execute_write(self, query, params, error_msg, error_cls=None):
-        self._run_write(lambda cursor: cursor.execute(
-            query, params), error_msg, error_cls)
+        self._run_write(lambda cursor: cursor.execute(query, params), error_msg, error_cls)
 
     def _execute_write_many(self, query, params_list, error_msg, error_cls=None):
-        self._run_write(lambda cursor: cursor.executemany(
-            query, params_list), error_msg, error_cls)
+        self._run_write(lambda cursor: cursor.executemany(query, params_list), error_msg, error_cls)

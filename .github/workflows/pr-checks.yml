@@ -21,7 +21,6 @@ jobs:
           filters: |
             java:
               - 'services/api/**'
-              - '!services/api/src/main/resources/db/migration/**'
             outbox-worker:
               - 'services/outbox-worker/**'
             python:
@@ -126,6 +125,10 @@ jobs:
         run: |
           pip install ruff
           ruff check .
+
+      - name: Format check with ruff
+        if: needs.detect-changes.outputs.python == 'true'
+        run: ruff format --check .
 
       - name: Docker build check
         if: needs.detect-changes.outputs.python == 'true'

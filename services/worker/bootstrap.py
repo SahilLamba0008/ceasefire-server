@@ -11,8 +11,8 @@ def build_pipeline():
     metadata_service = YouTubeMetadataService(YOUTUBE_API_KEY)
     analyze_service = AnalyzeService(GEMINI_API_KEY)
 
-    db = get_connection()
-    segment_service = SegmentService(db)
+    conn = get_connection()
+    segment_service = SegmentService(conn)
 
     pipeline = VideoProcessingPipeline(
         metadata_service=metadata_service,
@@ -22,4 +22,4 @@ def build_pipeline():
         segment_service=segment_service,
     )
 
-    return pipeline, db
+    return pipeline, conn

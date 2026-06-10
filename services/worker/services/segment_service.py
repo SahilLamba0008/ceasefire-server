@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentService:
-    def __init__(self, db):
+    def __init__(self, conn):
 
-        self.repository = SegmentRepository(db)
+        self.repository = SegmentRepository(conn)
 
     @staticmethod
     def parse_segments(result):

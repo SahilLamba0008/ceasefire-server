@@ -4,13 +4,12 @@ import os
 import time
 
 from bootstrap import build_pipeline
+from config.logging_config import setup_logging
 from config.settings import WORKER_MODE
 from exceptions import WorkerError
 from services.transcript_service import format_transcript
 
-logging.basicConfig(
-    filename="logs/app.log", level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+setup_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +30,20 @@ def load_job_config():
 
 
 def run_once(video_id, job_id):
-    pipeline, db = build_pipeline()
+    pipeline, conn = build_pipeline()
     try:
         response = pipeline.run(video_id, job_id)
         print(response)
         return response
-    except WorkerError as we:
-        logger.error(f"Worker error for video_id {video_id}: {str(we)}")
+    except WorkerError:
+        logger.exception(f"Worker error for video_id {video_id}")
         raise
-    except Exception as e:
-        logger.error(f"Unexpected error processing video_id {video_id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Unexpected error processing video_id {video_id}")
         raise
     finally:
-        if db:
-            db.close()
+        if conn:
+            conn.close()
             logger.info("Database connection closed")
 
 

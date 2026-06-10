@@ -49,9 +49,9 @@ class SegmentService:
 
         logger.info("Segment validation successful")
 
-    def create_segments(self, segments):
+    def create_segments(self, segments, job_id):
         # validation layer
         self.validate_segments(segments)
 
         # database layer
-        return self.repository.save_segments(segments)
+        return self.repository.save_segments(segments, job_id)

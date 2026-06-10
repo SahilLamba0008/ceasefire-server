@@ -20,20 +20,20 @@ JOB_FILE = "job.json"
 JOB_FILE_EXAMPLE = "job.example.json"
 
 
-def load_video_id():
+def load_job_config():
     path = JOB_FILE if os.path.exists(JOB_FILE) else JOB_FILE_EXAMPLE
 
     with open(path) as f:
         job = json.load(f)
 
-    logger.info(f"Loaded video_id from {path}")
-    return job["video_id"]
+    logger.info(f"Loaded job config from {path}")
+    return job["video_id"], job["job_id"]
 
 
-def run_once(video_id):
+def run_once(video_id, job_id):
     pipeline, db = build_pipeline()
     try:
-        response = pipeline.run(video_id)
+        response = pipeline.run(video_id, job_id)
         print(response)
         return response
     except WorkerError as we:
@@ -70,7 +70,8 @@ def main():
     logger.info(f"Starting worker in WORKER_MODE={WORKER_MODE}")
 
     if WORKER_MODE == "once":
-        run_once(load_video_id())
+        video_id, job_id = load_job_config()
+        run_once(video_id, job_id)
     else:
         idle()
 

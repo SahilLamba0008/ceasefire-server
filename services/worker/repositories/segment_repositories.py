@@ -1,5 +1,4 @@
 import logging
-import uuid
 
 from exceptions import PersistenceError
 
@@ -11,13 +10,11 @@ class SegmentRepository:
 
         self.conn = conn
 
-    def save_segments(self, segments):
+    def save_segments(self, segments, job_id):
 
         cursor = None
 
         try:
-            job_id = str(uuid.UUID("d2480a02-4639-41bd-a8ee-ec8ebb82ad05"))
-
             query = """
                 INSERT INTO segments(
                     job_id,

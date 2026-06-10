@@ -18,8 +18,8 @@ class VideoProcessingPipeline:
         self.analyze_service = analyze_service
         self.segment_service = segment_service
 
-    def run(self, video_id):
-        logger.info(f"Received request for video_id: {video_id}")
+    def run(self, video_id, job_id):
+        logger.info(f"Received request for video_id: {video_id}, job_id: {job_id}")
 
         metadata = self.metadata_service.get_metadata(video_id)
         logger.info(f"Metadata fetched: {metadata}")
@@ -32,7 +32,7 @@ class VideoProcessingPipeline:
 
         segments = self.segment_service.parse_segments(result)
 
-        response = self.segment_service.create_segments(segments)
+        response = self.segment_service.create_segments(segments, job_id)
         logger.info(response)
 
         return response

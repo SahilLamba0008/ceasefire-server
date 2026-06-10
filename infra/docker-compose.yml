@@ -81,6 +81,10 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY is required}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:?YOUTUBE_API_KEY is required}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      WORKER_MODE: ${WORKER_MODE:-idle}
+      RABBITMQ_ENV: ${RABBITMQ_ENV:-local}
+      RABBITMQ_LOCAL_URL: ${RABBITMQ_LOCAL_URL:-amqp://guest:guest@rabbitmq:5672/%2F}
+      RABBITMQ_HOSTED_URL: ${RABBITMQ_HOSTED_URL:-}
 
 volumes:
   postgres_data:

@@ -5,6 +5,8 @@ from exceptions.external_services import ExternalServiceError as ExternalService
 from exceptions.external_services import MetadataFetchError as MetadataFetchError
 from exceptions.external_services import SegmentGenerationError as SegmentGenerationError
 from exceptions.external_services import TranscriptFetchError as TranscriptFetchError
+from exceptions.messaging import BrokerConfigError as BrokerConfigError
+from exceptions.messaging import MessagingError as MessagingError
 from exceptions.segments import SegmentError as SegmentError
 from exceptions.segments import SegmentParsingError as SegmentParsingError
 from exceptions.segments import SegmentValidationError as SegmentValidationError

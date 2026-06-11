@@ -2,10 +2,13 @@ import logging
 
 import pika
 
-from config.settings import RABBITMQ_ENV, RABBITMQ_URL
+from config.settings import QUEUE_NAME, RABBITMQ_ENV, RABBITMQ_URL
 from exceptions import BrokerConfigError
 
 logger = logging.getLogger(__name__)
+
+EXCHANGE_NAME = "clipforge.events"
+ROUTING_KEY = "job.created"
 
 
 def get_connection_params():
@@ -23,3 +26,13 @@ def get_connection_params():
     )
 
     return params
+
+
+def declare_topology(channel):
+    channel.exchange_declare(exchange=EXCHANGE_NAME, exchange_type="topic", durable=True)
+    channel.queue_declare(queue=QUEUE_NAME, durable=True)
+    channel.queue_bind(queue=QUEUE_NAME, exchange=EXCHANGE_NAME, routing_key=ROUTING_KEY)
+
+    logger.info(
+        f"Declared topology: exchange={EXCHANGE_NAME} queue={QUEUE_NAME} routing_key={ROUTING_KEY}"
+    )

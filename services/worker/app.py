@@ -1,12 +1,12 @@
 import json
 import logging
 import os
-import time
 
 from bootstrap import build_pipeline
 from config.logging_config import setup_logging
 from config.settings import WORKER_MODE
 from exceptions import WorkerError
+from services.event_consumer import run_consumer
 from services.transcript_service import format_transcript
 
 setup_logging()
@@ -48,11 +48,8 @@ def run_once(video_id, job_id):
 
 
 def idle():
-    # TODO: replace with a pika consumer on the `jobs.created` queue once the
-    # RabbitMQ wiring is ready — this should call run_once(video_id) per message.
-    logger.info("WORKER_MODE=idle → no consumer wired up yet, idling without external calls")
-    while True:
-        time.sleep(3600)
+    logger.info("WORKER_MODE=idle → starting RabbitMQ consumer on jobs.created")
+    run_consumer()
 
 
 def main():

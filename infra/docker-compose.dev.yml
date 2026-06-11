@@ -6,4 +6,4 @@ services:
       context: ../services/worker
     volumes:
       - ../services/worker:/app
-    command: python -m watchfiles --filter python "python main.py" /app
+    command: python -m watchfiles --filter python "python app.py" /app

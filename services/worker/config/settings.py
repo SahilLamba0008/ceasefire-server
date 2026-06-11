@@ -19,6 +19,8 @@ RABBITMQ_ENV = os.getenv("RABBITMQ_ENV", "local")
 
 RABBITMQ_LOCAL_URL = os.getenv("RABBITMQ_LOCAL_URL", "amqp://guest:guest@rabbitmq:5672/%2F")
 RABBITMQ_HOSTED_URL = os.getenv("RABBITMQ_HOSTED_URL")
+QUEUE_NAME = os.getenv("QUEUE_NAME", "jobs.created")
+PREFETCH_COUNT = int(os.getenv("PREFETCH_COUNT", "4"))
 
 RABBITMQ_URL = RABBITMQ_HOSTED_URL if RABBITMQ_ENV == "hosted" else RABBITMQ_LOCAL_URL
 

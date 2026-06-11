@@ -10,6 +10,9 @@ Thumbs.db
 !.env.example
 .docker-env
 
+services/worker/job.json
+!services/worker/job.example.json
+
 ### --- Python --- ###
 __pycache__/
 *.py[cod]

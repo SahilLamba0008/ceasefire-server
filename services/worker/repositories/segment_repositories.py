@@ -1,52 +1,23 @@
-import logging
-import uuid
-
-logger = logging.getLogger(__name__)
+from exceptions import PersistenceError
+from repositories.base import BaseRepository
 
 
-class SegmentRepository:
-    def __init__(self, conn):
+class SegmentRepository(BaseRepository):
+    def save_segments(self, segments, job_id):
+        query = """
+            INSERT INTO segments (job_id, segment_start_time, segment_end_time, reason)
+            VALUES (%s, %s, %s, %s)
+        """
 
-        self.conn = conn
+        params_list = [
+            (job_id, segment["start"], segment["end"], segment["reason"]) for segment in segments
+        ]
 
-    def save_segments(self, segments):
+        self._execute_write_many(
+            query,
+            params_list,
+            error_msg="Failed to save segments",
+            error_cls=PersistenceError,
+        )
 
-        cursor = None
-
-        try:
-            job_id = str(uuid.UUID("d2480a02-4639-41bd-a8ee-ec8ebb82ad05"))
-
-            query = """
-                INSERT INTO segments(
-                    job_id,
-                    segment_start_time,
-                    segment_end_time,
-                    reason
-                )
-                VALUES(
-                    %s,
-                    %s,
-                    %s,
-                    %s
-                )
-            """
-
-            cursor = self.conn.cursor()
-
-            for segment in segments:
-                cursor.execute(query, (job_id, segment["start"], segment["end"], segment["reason"]))
-
-            self.conn.commit()
-
-            return {"message": "segments updated successfully", "count": len(segments)}
-
-        except Exception as e:
-            self.conn.rollback()
-
-            logger.error(f"DB insert failed {e}")
-
-            raise
-
-        finally:
-            if cursor:
-                cursor.close()
+        return {"message": "segments updated successfully", "count": len(segments)}

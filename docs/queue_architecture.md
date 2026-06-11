@@ -153,18 +153,19 @@ Without dedup, redelivery means Groq gets called twice for the same job. That's 
 - **Responsibilities:**
   - Poll `event.job_events` for `PENDING` rows
   - Publish them to RabbitMQ with publisher confirms
-  - Update row status (`SENT` / `FAILED` / `DEAD`)
+  - Update row status (`PROCESSED` / `FAILED` / `DEAD`)
   - Recover stale `PROCESSING` rows
 - **Does NOT:** Own any tables. Does NOT run migrations.
 
-### 3. Python ML Worker (`clipforge-ml-worker`)
+### 3. Python ML Worker (`services/worker`)
 
 - **Role:** Consume events, call Groq, persist clips
-- **Tech:** Python, `pika`, `psycopg`, shared Postgres connection
+- **Tech:** Python, `pika`, `psycopg2`, single shared Postgres connection (no pool — single-threaded consumer)
 - **Responsibilities:**
-  - Consume from `clipforge.events` exchange
-  - Dedup via `event.inbox_events` unique constraint
-  - Call Groq API and persist results
+  - Consume from the existing `jobs.created` queue (declared by outbox-worker's `RabbitMQConfig`, bound to `clipforge.events` with routing key `job.created`) — manual ack, configurable prefetch (default 4)
+  - Dedup via `events.inbox_events` unique constraint
+  - Call Groq API and persist results (downstream of Story 9)
+- **DB access:** Uses the same DB credentials/role as the rest of the worker (full read/write) — no separate role scoped to the inbox table, since the same connection will write `jobs`/`segments` etc. for processing
 - **Does NOT:** Own any tables. Does NOT run migrations.
 
 **Schema ownership rule:** Only the Java backend runs Flyway. Both workers are read/write consumers of the schema but never modify it. This avoids migration-ordering conflicts.
@@ -198,13 +199,13 @@ CREATE TABLE event.job_events (
     event_type     TEXT NOT NULL,                 -- 'job.created', 'job.clip.ready', etc.
     payload        JSONB NOT NULL,                -- full event data, includes job_id
     status         TEXT NOT NULL DEFAULT 'PENDING',
-                                                  -- PENDING | PROCESSING | SENT | FAILED | DEAD
+                                                  -- PENDING | PROCESSING | PROCESSED | FAILED | DEAD
     retry_count    INT NOT NULL DEFAULT 0,
     last_error     TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    processed_at   TIMESTAMPTZ,                   -- set when SENT
-    CONSTRAINT valid_status CHECK (status IN ('PENDING','PROCESSING','SENT','FAILED','DEAD'))
+    processed_at   TIMESTAMPTZ,                   -- set when PROCESSED
+    CONSTRAINT valid_status CHECK (status IN ('PENDING','PROCESSING','PROCESSED','FAILED','DEAD'))
 );
 
 CREATE INDEX idx_job_events_poll ON event.job_events (status, created_at);
@@ -230,9 +231,9 @@ The unique constraint on `message_id` is what makes dedup atomic. We don't `SELE
 Defined in Flyway migrations, called by the outbox worker:
 
 - `event.get_pending_events(batch_size, max_retries)` — atomic fetch-and-lock using `FOR UPDATE SKIP LOCKED`
-- `event.mark_as_sent(event_id)` — set status to SENT
+- `event.mark_as_sent(event_id)` — set status to PROCESSED (implemented as `JobEventRepository.markProcessed`, a Java raw `UPDATE`, not a DB function)
 - `event.mark_as_failed(event_id, error, max_retries)` — increment retry_count, move to FAILED or DEAD
-- `event.recover_stale_processing(timeout_seconds)` — reset stuck PROCESSING rows
+- ~~`event.recover_stale_processing(timeout_seconds)`~~ — not a DB function. Implemented as `JobEventRepository.releaseStaleLeases(timeoutSeconds)`, two raw `UPDATE`s run at the start of every poll cycle (not on a separate schedule)
 
 ---
 
@@ -308,7 +309,7 @@ for (OutboxEvent event : events) {
 
 - If the outbox insert rolls back, the event never existed, no harm done
 - If the outbox insert commits but the worker crashes before publishing, the row stays `PENDING` and the next worker poll picks it up
-- If the worker publishes but crashes before updating status, the row stays `PROCESSING` and the stale-processing recovery resets it to `PENDING` after 5 minutes — will be republished, deduplicated by the inbox
+- If the worker publishes but crashes before updating status, the row stays `PROCESSING` and `releaseStaleLeases()` resets it to `PENDING` (no `retry_count` increment) once `locked_at` is older than `OUTBOX_STALE_LEASE_TIMEOUT_SECONDS` (default 5 minutes) — will be republished, deduplicated by the inbox
 
 ---
 
@@ -455,14 +456,14 @@ Body: {"event_id":"E1","event_type":"job.created","payload":{"job_id":"J1",...}}
 
 Broker sends publisher confirm.
 
-### T+1.06s: Outbox worker marks SENT
+### T+1.06s: Outbox worker marks PROCESSED
 
 ```java
-jdbc.update("SELECT event.mark_as_sent(?)", "E1");
+repository.markProcessed(eventId); // raw UPDATE, sets status='PROCESSED', processed_at=now()
 ```
 
 State:
-- `event.job_events`: E1 / SENT / processed_at=now()
+- `event.job_events`: E1 / PROCESSED / processed_at=now()
 
 ### T+1.1s: Python worker receives message
 
@@ -528,10 +529,10 @@ T+31.01s  Python Worker  ──ack──► RabbitMQ
                │
                ▼
            PENDING ◄──────────────────┐
-               │                       │ (recover_stale_processing
-               │ worker polls,         │  resets PROCESSING → PENDING
-               │ FOR UPDATE SKIP LOCKED│  if stuck > 5min)
-               ▼                       │
+               │                       │ (releaseStaleLeases() resets
+               │ worker polls,         │  PROCESSING → PENDING if
+               │ FOR UPDATE SKIP LOCKED│  locked_at stale > 5min;
+               ▼                       │  → terminal if retries exhausted)
          PROCESSING ───────────────────┤
                │                       │
        ┌───────┴───────┐               │
@@ -539,17 +540,26 @@ T+31.01s  Python Worker  ──ack──► RabbitMQ
    publish         publish             │
    confirmed       failed              │
        │               │               │
-       ▼               ▼               │
-      SENT          FAILED ────────────┤
-       │               │ (retry_count < MAX)
-       │               │
-       │               │ retry_count >= MAX
-       │               ▼
-       │             DEAD (terminal — alert on these)
+       │               │ retry_count < MAX
+       │               │ (status reset to PENDING,
+       │               │  available_at = now() + 2^retry_count)
+       │               └───────────────┘
+       │
+       │ retry_count >= MAX on failure
+       ▼               ▼
+   PROCESSED      FAILED (terminal — alert on these)
        │
        ▼
     archived after N days (not in MVP)
 ```
+
+> **Implementation note:** the current code (`OutboxPollingService.handleFailure`,
+> `JobEventRepository`) does not have a separate "FAILED" retry state — a failed
+> publish goes straight back to `PENDING` with exponential backoff via
+> `available_at`. The terminal state on retry exhaustion is currently named
+> `FAILED`, not `DEAD`. **Story 6** covers renaming this terminal state to `DEAD`
+> (new migration adding `DEAD` to `job_events_status_check`, and renaming
+> `JobEventRepository.markFailed` → `markDead`).
 
 ### Inbox row lifecycle
 
@@ -587,8 +597,8 @@ success  failure
 |---|---|---|
 | Backend crashes before COMMIT | No job, no event | Transaction rollback, nothing to recover |
 | Backend commits, outbox worker hasn't polled yet | Row in PENDING | Next poll picks it up |
-| Outbox worker crashes mid-publish | Row stuck in PROCESSING | `recover_stale_processing` resets to PENDING after 5min |
-| RabbitMQ down when worker tries to publish | Publish fails, row → FAILED | Retry on next poll (up to MAX_RETRIES) |
+| Outbox worker crashes mid-publish | Row stuck in PROCESSING | `releaseStaleLeases()` resets to PENDING after 5min (or terminal if retries exhausted) |
+| RabbitMQ down when worker tries to publish | Publish fails, row → PENDING with backoff (`available_at` pushed out) | Retry on next poll once `available_at` elapses (up to `max_retries`, then → `FAILED`/soon `DEAD`) |
 | Publish succeeds, status update fails | Row stuck in PROCESSING but message sent | Recovery resets to PENDING → republished → inbox dedups on consumer |
 | RabbitMQ redelivers a message | Python worker receives it twice | Inbox unique constraint catches the duplicate |
 | Python worker crashes mid-processing | Message nacked, requeued | Rabbit redelivers; inbox dedups if DB work had committed, otherwise reprocesses cleanly |
@@ -823,22 +833,25 @@ RETURNS void AS $$
 $$ LANGUAGE sql;
 ```
 
-### SQL: Stale processing recovery
+### Stale processing recovery (as implemented)
 
-```sql
-CREATE OR REPLACE FUNCTION event.recover_stale_processing(p_timeout_seconds INT)
-RETURNS INT AS $$
-    WITH reset AS (
-        UPDATE event.job_events
-        SET status = 'PENDING',
-            retry_count = retry_count + 1,
-            updated_at = now()
-        WHERE status = 'PROCESSING'
-          AND updated_at < now() - (p_timeout_seconds || ' seconds')::interval
-        RETURNING event_id
-    )
-    SELECT COUNT(*)::INT FROM reset;
-$$ LANGUAGE sql;
+Not a DB function — `JobEventRepository.releaseStaleLeases(timeoutSeconds)` runs two raw `UPDATE`s at the start of every poll cycle:
+
+```java
+// retries remaining → back to PENDING, lock cleared, retry_count unchanged
+UPDATE events.job_events
+SET status = 'PENDING', locked_by = NULL, locked_at = NULL
+WHERE status = 'PROCESSING'
+  AND locked_at < now() - (:timeoutSeconds * interval '1 second')
+  AND retry_count < max_retries
+
+// retries exhausted → terminal (FAILED, soon DEAD per Story 6)
+UPDATE events.job_events
+SET status = 'FAILED', locked_by = NULL, locked_at = NULL,
+    last_error = 'Stale lease: processing timed out'
+WHERE status = 'PROCESSING'
+  AND locked_at < now() - (:timeoutSeconds * interval '1 second')
+  AND retry_count >= max_retries
 ```
 
 ---
@@ -853,11 +866,11 @@ $$ LANGUAGE sql;
 | **3. Polling loop** | `clipforge-outbox-worker` | `poller/OutboxPoller.java`, `OutboxEventRowMapper.java` |
 | **4. Publish to RabbitMQ** | `clipforge-outbox-worker` | `publisher/OutboxPublisher.java`, `config/RabbitConfig.java` |
 | **5. Update status** | `clipforge-outbox-worker` | `poller/OutboxPoller.java` (extend) |
-| **6. Retry + DEAD** | `clipforge-backend` (new migration) + `clipforge-outbox-worker` | V-migration updating functions; `OutboxPoller.java` passes maxRetries |
-| **7. Stale recovery** | `clipforge-backend` (new migration) + `clipforge-outbox-worker` | V-migration adding `recover_stale_processing`; `recovery/StaleProcessingRecovery.java` |
-| **8. Inbox table** | `clipforge-backend` | `db/migration/V*__create_inbox_events_table.sql` |
-| **9. Python consumer** | `clipforge-ml-worker` (NEW) | `clipforge_worker/__main__.py`, `Dockerfile`, GitHub Actions workflow |
-| **10. E2E validation** | `clipforge-backend` or new `clipforge-integration-tests` | Manual checklist or Testcontainers test |
+| **6. Retry + DEAD** | `services/api` (new migration) + `services/outbox-worker` | ✅ Backoff retry already done (`OutboxPollingService.handleFailure`). Remaining: `db/migration/V8__add_dead_status_to_job_events.sql` adding `DEAD` to `job_events_status_check`; rename `JobEventRepository.markFailed` → `markDead` |
+| **7. Stale recovery** | `services/outbox-worker` | ✅ Done — implemented as `JobEventRepository.releaseStaleLeases()`, called every poll cycle from `OutboxPollingService`, instead of a separate SQL function/recovery class |
+| **8. Inbox table** | `services/api` | ✅ Done — scope reduced to schema only: `db/migration/V6__create_inbox_events_table.sql` creates `events.inbox_events`. Dedup logic (insert + unique-violation handling) moved to Story 9 |
+| **9. Python consumer** | `services/worker` | 🚧 Not started. Replace `app.py::idle()` placeholder with a `pika` consumer on the existing `jobs.created` queue (env `QUEUE_NAME`, default `jobs.created`; `PREFETCH_COUNT`, default `4`), manual ack, inbox dedup insert into `events.inbox_events` via existing `config/database.py::get_connection()` (no pool, no DB-role scoping — worker keeps its existing full DB access for downstream processing stories) |
+| **10. Outbox-worker logging** | `services/outbox-worker` | 🚧 Not started. Add `event_id`/`job_id` MDC correlation (text-pattern logs, Loki-ready encoder swap deferred), standardize log levels, bump publish-success to `INFO`, and log per-row `event_id` + age in `releaseStaleLeases()` (carried over from Story 7). See "Logging Conventions" below |
 
 ### Repo map
 
@@ -870,26 +883,29 @@ clipforge-backend/              (existing)
     ├── V2__create_job_events_table.sql                   [Story 0]
     ├── V3__create_outbox_functions.sql                   [Story 0]
     ├── V4__create_inbox_events_table.sql                 [Story 8]
-    ├── V5__add_dead_status_and_retries.sql               [Story 6]
-    └── V6__add_recover_stale_processing.sql              [Story 7]
+    └── V5__add_dead_status_and_retries.sql               [Story 6]
+    (no migration needed for Story 7 — recovery lives entirely in
+     services/outbox-worker, no new DB function required)
 
 clipforge-outbox-worker/        (NEW — Story 2)
 ├── src/main/java/.../
 │   ├── OutboxWorkerApplication.java
 │   ├── poller/OutboxPoller.java                          [Story 3]
 │   ├── publisher/OutboxPublisher.java                    [Story 4]
-│   ├── recovery/StaleProcessingRecovery.java             [Story 7]
+│   ├── repository/JobEventRepository.java                [Story 7 - releaseStaleLeases(), done]
 │   ├── domain/OutboxEvent.java
 │   └── config/{DatabaseConfig,RabbitConfig}.java
 ├── Dockerfile
 └── .github/workflows/build.yml
 
-clipforge-ml-worker/            (NEW — Story 9)
-├── clipforge_worker/
-│   └── __main__.py
+services/worker/                (existing — Story 9 extends it)
+├── app.py                                                 [Story 9 - replace idle() with consumer]
+├── config/
+│   ├── settings.py                                        [Story 9 - add QUEUE_NAME, PREFETCH_COUNT]
+│   ├── rabbitmq.py                                        [Story 9 - extend: queue declare, consume]
+│   └── database.py                                        [reused as-is, no pool]
 ├── pyproject.toml
-├── Dockerfile
-└── .github/workflows/build.yml
+└── Dockerfile
 ```
 
 ---
@@ -949,13 +965,12 @@ spring:
     password: ${RABBITMQ_PASSWORD}
     publisher-confirm-type: correlated
 outbox:
-  poll:
-    interval-ms: 1000
-  batch-size: 100
-  max-retries: 5
-  stale:
-    interval-ms: 120000        # 2 minutes between recovery runs
-    timeout-seconds: 300       # reset PROCESSING rows older than 5 minutes
+  batch-size: 10                          # OUTBOX_BATCH_SIZE
+  poll-interval-ms: 1000                  # OUTBOX_POLL_INTERVAL_MS
+  stale-leasetimeout-seconds: 300         # OUTBOX_STALE_LEASE_TIMEOUT_SECONDS — checked every poll cycle, no separate schedule
+  max-startup-retries: 10                 # OUTBOX_MAX_STARTUP_RETRIES
+  exchange: clipforge.events              # OUTBOX_EXCHANGE
+  publisher-confirm-timeout-ms: 5000      # OUTBOX_PUBLISHER_CONFIRM_TIMEOUT_MS
 ```
 
 ### Python worker
@@ -1009,7 +1024,7 @@ In theory yes — you'd give it write access to `event.job_events` and it would 
 
 ### What happens when the outbox table grows huge?
 
-For MVP, not a concern. Once `SENT` rows accumulate into the millions, polling latency will degrade because the `(status, created_at)` index is doing more work. Fix: cleanup job deleting `SENT` rows older than N days (deferred from MVP per earlier decision).
+For MVP, not a concern. Once `PROCESSED` rows accumulate into the millions, polling latency will degrade because the `(status, created_at)` index is doing more work. Fix: cleanup job deleting `PROCESSED` rows older than N days (deferred from MVP per earlier decision).
 
 ### How do we monitor this in production?
 
@@ -1018,7 +1033,54 @@ Deferred from MVP, but the planned approach:
 - Metric: count of `DEAD` rows — alert on any > 0
 - Metric: count of `PENDING` rows older than 1 minute — alert on backlog
 - Metric: time since last successful poll
-- Logs grep-able by `job_id`
+- Logs grep-able by `job_id` and `event_id` — see **Story 10: Logging Conventions** below
+
+### Logging Conventions (Story 10)
+
+**Scope:** `services/outbox-worker` only. Backend and Python worker logging are out of scope for this story.
+
+**Goal:** every log line for a given event in `services/outbox-worker` can be found by grepping a single `event_id`, and log levels follow a consistent meaning.
+
+**Correlation IDs:**
+- Use SLF4J MDC — `MDC.put("event_id", ...)` (and `job_id` if available from the payload) around the relevant operation (publish attempt, poll-cycle event processing), `MDC.clear()` after. Logback pattern includes `%X{event_id}`/`%X{job_id}`
+
+**Tech Note — what is SLF4J MDC:**
+
+MDC (Mapped Diagnostic Context) is a thread-local key-value map. Values put into it are automatically attached to every log line on that thread, without passing them to each `log.info(...)` call:
+
+```java
+MDC.put("event_id", event.getId().toString());
+try {
+    log.info("Publishing event");      // → {"event_id":"abc-123", "msg":"Publishing event"}
+    publisher.publish(event, exchange);
+    repository.markProcessed(event.getId());
+    log.info("Marked processed");      // → {"event_id":"abc-123", "msg":"Marked processed"}
+} finally {
+    MDC.clear();
+}
+```
+
+With the `LogstashEncoder`, MDC entries are emitted as top-level JSON fields automatically — this is what makes `event_id` queryable in Loki without manually formatting it into every message.
+
+**Caveat:** `OutboxPollingService` reuses a single dedicated polling thread across all events. `MDC.clear()` (or remove the specific keys) **must** be called after each event in `processEvent()`/`handleFailure()` — otherwise a later event's logs could carry a stale `event_id` left over from a previous one on the same thread.
+
+**Log level conventions:**
+- `INFO` — lifecycle events and successful state transitions: event published (broker confirm received), event marked `PROCESSED`
+- `WARN` — recoverable issues: publish failure with retries remaining, stale lease released back to `PENDING`, connection retry/backoff
+- `ERROR` — terminal failures: event reaches `DEAD`, unhandled exception in poll loop
+- `DEBUG` — low-level diagnostic detail only (raw payloads, SQL params)
+
+**Specific fixes as part of this story:**
+- `RabbitMQEventPublisher.publish()` success log: bump from `DEBUG` → `INFO`, include `event_id` and `routing_key` (carried over from Story 5 review)
+- `JobEventRepository.releaseStaleLeases()`: currently logs only aggregate counts (`reset`/`failed`). Change to log **per recovered row** with `event_id` and the age of the stale lease (`now() - locked_at`), at `WARN` for reset-to-`PENDING` and `ERROR` for moved-to-`DEAD` (carried over from Story 7 AC: "Recovery action is logged with event_id and age")
+- Any place currently logging full payloads: truncate (reuse the `truncate()` pattern from `OutboxPollingService`) to avoid noisy/sensitive logs
+
+**Format:** Text pattern encoder with MDC fields inline, e.g. `%d{ISO8601} %-5level [event_id=%X{event_id}, job_id=%X{job_id}] %logger - %msg%n`. Loki is currently disabled (memory cost), so JSON has no consumer yet — text stays human-readable for `docker logs`/grep. MDC population is the actual deliverable; switching to `LogstashEncoder`/JSON later (when Loki is re-enabled) is a pure Logback appender config change, no code changes needed.
+
+**Testing:**
+- Force a publish failure with retries remaining → `WARN` log includes `event_id`, `retry_count`, backoff seconds
+- Force retry exhaustion → `ERROR` log on transition to `DEAD`, includes `event_id` and `last_error`
+- Manually set a row to `PROCESSING` with stale `locked_at` → next poll cycle logs `event_id` and age (e.g. `"Released stale lease for event {event_id}, stuck for {age}s"`) at `WARN` (or `ERROR` if it moves to `DEAD`)
 
 ### Why does the backend own the inbox table's migration if the Python worker uses it?
 

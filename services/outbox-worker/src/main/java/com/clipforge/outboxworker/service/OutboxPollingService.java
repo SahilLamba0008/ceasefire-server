@@ -129,8 +129,8 @@ public abstract class OutboxPollingService<T extends IOutboxEvent> implements Sm
         String errorMsg = truncate(e.getMessage(), 1000);
 
         if (nextRetryCount >= event.getMaxRetries()) {
-            repository.markFailed(event.getId(), nextRetryCount, errorMsg);
-            log.error("Event {} permanently failed after {} retries: {}", event.getId(), nextRetryCount, e.getMessage());
+            repository.markDead(event.getId(), nextRetryCount, errorMsg);
+            log.error("Event {} permanently dead after {} retries: {}", event.getId(), nextRetryCount, e.getMessage());
         } else {
             long backoffSeconds = (long) Math.pow(2, nextRetryCount);
             repository.reschedule(event.getId(), nextRetryCount, backoffSeconds, errorMsg);

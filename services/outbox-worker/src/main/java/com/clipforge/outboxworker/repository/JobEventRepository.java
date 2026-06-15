@@ -59,11 +59,11 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
     }
 
     @Override
-    public void markFailed(UUID eventId, int retryCount, String error) {
+    public void markDead(UUID eventId, int retryCount, String error) {
         jdbc.update("""
             UPDATE events.job_events
-            SET status = 'FAILED', retry_count = :retryCount, last_error = :error,
-                locked_by = NULL, locked_at = NULL
+            SET status = 'DEAD', retry_count = :retryCount, last_error = :error,
+                locked_by = NULL, locked_at = NULL, updated_at = now()
             WHERE id = :id
             """,
             new MapSqlParameterSource()
@@ -102,19 +102,19 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
             new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
         );
 
-        int failed = jdbc.update("""
-            UPDATE events.job_events
-            SET status = 'FAILED', locked_by = NULL, locked_at = NULL,
-                last_error = 'Stale lease: processing timed out'
-            WHERE status = 'PROCESSING'
-              AND locked_at < now() - (:timeoutSeconds * interval '1 second')
-              AND retry_count >= max_retries
-            """,
-            new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
-        );
+                int failed = jdbc.update("""
+                        UPDATE events.job_events
+                        SET status = 'DEAD', locked_by = NULL, locked_at = NULL,
+                                last_error = 'Stale lease: processing timed out', updated_at = now()
+                        WHERE status = 'PROCESSING'
+                            AND locked_at < now() - (:timeoutSeconds * interval '1 second')
+                            AND retry_count >= max_retries
+                        """,
+                        new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
+                );
 
-        if (reset > 0) log.info("Released {} stale lease(s) back to PENDING", reset);
-        if (failed > 0) log.warn("Marked {} stale lease(s) as FAILED (max retries exhausted)", failed);
+                if (reset > 0) log.info("Released {} stale lease(s) back to PENDING", reset);
+                if (failed > 0) log.warn("Marked {} stale lease(s) as DEAD (max retries exhausted)", failed);
     }
 
     private static OffsetDateTime toOffsetDateTime(Timestamp ts) {

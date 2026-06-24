@@ -1,7 +1,8 @@
 import logging
 
-from exceptions import DatabaseError
 from psycopg2.extras import execute_values
+
+from exceptions import DatabaseError
 
 logger = logging.getLogger(__name__)
 

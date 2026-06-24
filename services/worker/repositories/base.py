@@ -1,6 +1,7 @@
 import logging
 
 from exceptions import DatabaseError
+from psycopg2.extras import execute_values
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +18,11 @@ class BaseRepository:
         try:
             cursor = self.conn.cursor()
 
-            action(cursor)
+            result = action(cursor)
 
             self.conn.commit()
+
+            return result
 
         except Exception as e:
             self.conn.rollback()
@@ -37,3 +40,10 @@ class BaseRepository:
 
     def _execute_write_many(self, query, params_list, error_msg, error_cls=None):
         self._run_write(lambda cursor: cursor.executemany(query, params_list), error_msg, error_cls)
+
+    def _execute_values_returning(self, query, params_list, error_msg, error_cls=None):
+        return self._run_write(
+            lambda cursor: execute_values(cursor, query, params_list, fetch=True),
+            error_msg,
+            error_cls,
+        )

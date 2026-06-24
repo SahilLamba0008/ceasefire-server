@@ -3,6 +3,7 @@ import logging
 import re
 
 from exceptions import SegmentParsingError, SegmentValidationError
+from repositories.clip_repository import ClipRepository
 from repositories.segment_repositories import SegmentRepository
 
 logger = logging.getLogger(__name__)
@@ -10,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 class SegmentService:
     def __init__(self, conn):
-
         self.repository = SegmentRepository(conn)
+        self.clip_repository = ClipRepository(conn)
 
     @staticmethod
     def parse_segments(result):
@@ -50,8 +51,9 @@ class SegmentService:
         logger.info("Segment validation successful")
 
     def create_segments(self, segments, job_id):
-        # validation layer
         self.validate_segments(segments)
 
-        # database layer
-        return self.repository.save_segments(segments, job_id)
+        segment_ids = self.repository.save_segments(segments, job_id)
+        self.clip_repository.create_pending_clips(segment_ids, job_id)
+
+        return {"message": "segments updated successfully", "count": len(segments)}

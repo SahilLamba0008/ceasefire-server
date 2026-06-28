@@ -1,6 +1,7 @@
 package com.clipforge.outboxworker.service;
 
 import com.clipforge.outboxworker.config.OutboxProperties;
+import com.clipforge.outboxworker.logging.OutboxMdc;
 import com.clipforge.outboxworker.model.IOutboxEvent;
 import com.clipforge.outboxworker.publisher.IEventPublisher;
 import com.clipforge.outboxworker.repository.IOutboxEventRepository;
@@ -117,10 +118,14 @@ public abstract class OutboxPollingService<T extends IOutboxEvent> implements Sm
 
     private void processEvent(T event) {
         try {
+            OutboxMdc.putEventContext(event);
             publisher.publish(event, props.getExchange());
             repository.markProcessed(event.getId());
+            log.info("Event marked PROCESSED [event_id={}, event_type={}]", event.getId(), event.getEventType());
         } catch (AmqpException | DataAccessException e) {
             handleFailure(event, e);
+        } finally {
+            OutboxMdc.clear();
         }
     }
 
@@ -130,12 +135,12 @@ public abstract class OutboxPollingService<T extends IOutboxEvent> implements Sm
 
         if (nextRetryCount >= event.getMaxRetries()) {
             repository.markDead(event.getId(), nextRetryCount, errorMsg);
-            log.error("Event {} permanently dead after {} retries: {}", event.getId(), nextRetryCount, e.getMessage());
+            log.error("Event moved to DEAD after {} retries: {}", nextRetryCount, errorMsg);
         } else {
             long backoffSeconds = (long) Math.pow(2, nextRetryCount);
             repository.reschedule(event.getId(), nextRetryCount, backoffSeconds, errorMsg);
-            log.warn("Event {} failed, retry {}/{} scheduled in {}s",
-                event.getId(), nextRetryCount, event.getMaxRetries(), backoffSeconds);
+            log.warn("Publish failed, retry {}/{} scheduled in {}s: {}",
+                nextRetryCount, event.getMaxRetries(), backoffSeconds, errorMsg);
         }
     }
 
@@ -151,7 +156,7 @@ public abstract class OutboxPollingService<T extends IOutboxEvent> implements Sm
         }
     }
 
-    private String truncate(String s, int max) {
+    public static String truncate(String s, int max) {
         if (s == null) return null;
         return s.length() <= max ? s : s.substring(0, max);
     }

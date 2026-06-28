@@ -1,5 +1,6 @@
 package com.clipforge.outboxworker.repository;
 
+import com.clipforge.outboxworker.logging.OutboxMdc;
 import com.clipforge.outboxworker.model.JobEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -92,33 +94,79 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
 
     @Override
     public void releaseStaleLeases(long timeoutSeconds) {
-        int reset = jdbc.update("""
-            UPDATE events.job_events
-            SET status = 'PENDING', locked_by = NULL, locked_at = NULL
+        List<RecoveredLease> resetLeases = recoverStaleLeases("""
+            SELECT id, job_id, EXTRACT(EPOCH FROM (now() - locked_at))::bigint AS lease_age_seconds
+            FROM events.job_events
             WHERE status = 'PROCESSING'
-              AND locked_at < now() - (:timeoutSeconds * interval '1 second')
+              AND locked_at < now() - make_interval(secs => :timeoutSeconds)
               AND retry_count < max_retries
-            """,
-            new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
-        );
+            """, timeoutSeconds);
 
-                int failed = jdbc.update("""
-                        UPDATE events.job_events
-                        SET status = 'DEAD', locked_by = NULL, locked_at = NULL,
-                                last_error = 'Stale lease: processing timed out', updated_at = now()
-                        WHERE status = 'PROCESSING'
-                            AND locked_at < now() - (:timeoutSeconds * interval '1 second')
-                            AND retry_count >= max_retries
-                        """,
-                        new MapSqlParameterSource("timeoutSeconds", timeoutSeconds)
-                );
+        List<RecoveredLease> deadLeases = recoverStaleLeases("""
+            SELECT id, job_id, EXTRACT(EPOCH FROM (now() - locked_at))::bigint AS lease_age_seconds
+            FROM events.job_events
+            WHERE status = 'PROCESSING'
+              AND locked_at < now() - make_interval(secs => :timeoutSeconds)
+              AND retry_count >= max_retries
+            """, timeoutSeconds);
 
-                if (reset > 0) log.info("Released {} stale lease(s) back to PENDING", reset);
-                if (failed > 0) log.warn("Marked {} stale lease(s) as DEAD (max retries exhausted)", failed);
+        for (RecoveredLease lease : resetLeases) {
+            jdbc.update("""
+                UPDATE events.job_events
+                SET status = 'PENDING', locked_by = NULL, locked_at = NULL
+                WHERE id = :id
+                """,
+                new MapSqlParameterSource("id", lease.eventId())
+            );
+
+            OutboxMdc.putEventContext(lease.eventId(), lease.jobId());
+            try {
+                log.warn("Released stale lease back to PENDING [event_id={}, lease_age_seconds={}s]",
+                    lease.eventId(), lease.leaseAgeSeconds());
+            } finally {
+                OutboxMdc.clear();
+            }
+        }
+
+        for (RecoveredLease lease : deadLeases) {
+            jdbc.update("""
+                UPDATE events.job_events
+                SET status = 'DEAD', locked_by = NULL, locked_at = NULL,
+                    last_error = 'Stale lease: processing timed out', updated_at = now()
+                WHERE id = :id
+                """,
+                new MapSqlParameterSource("id", lease.eventId())
+            );
+
+            OutboxMdc.putEventContext(lease.eventId(), lease.jobId());
+            try {
+                log.error("Moved stale lease to DEAD [event_id={}, lease_age_seconds={}s, reason=max_retries_exhausted]",
+                    lease.eventId(), lease.leaseAgeSeconds());
+            } finally {
+                OutboxMdc.clear();
+            }
+        }
     }
 
     private static OffsetDateTime toOffsetDateTime(Timestamp ts) {
         if (ts == null) return null;
         return ts.toInstant().atOffset(ZoneOffset.UTC);
+    }
+
+    private List<RecoveredLease> recoverStaleLeases(String sql, long timeoutSeconds) {
+        return jdbc.query(sql, new MapSqlParameterSource("timeoutSeconds", timeoutSeconds), rs -> {
+            List<RecoveredLease> recoveredLeases = new ArrayList<>();
+            while (rs.next()) {
+                recoveredLeases.add(new RecoveredLease(
+                    rs.getObject("id", UUID.class),
+                    rs.getObject("job_id", UUID.class),
+                    rs.getLong("lease_age_seconds")
+                ));
+            }
+            return recoveredLeases;
+        });
+    }
+
+    private record RecoveredLease(UUID eventId, UUID jobId, long leaseAgeSeconds) {
     }
 }

@@ -1,7 +1,9 @@
 package com.clipforge.outboxworker.publisher;
 
 import com.clipforge.outboxworker.config.OutboxProperties;
+import com.clipforge.outboxworker.logging.OutboxMdc;
 import com.clipforge.outboxworker.model.IOutboxEvent;
+import com.clipforge.outboxworker.service.OutboxPollingService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -31,26 +33,35 @@ public abstract class RabbitMQEventPublisher<T extends IOutboxEvent> implements 
 
     @Override
     public final void publish(T event, String exchange) {
-        JsonNode parsedPayload = parsePayload(event);
-        String eventId = extractEventId(event, parsedPayload);
-        String body = buildMessageBody(event, parsedPayload);
-        String routingKey = eventTypeToRoutingKey(event.getEventType());
+        OutboxMdc.putEventContext(event);
+        try {
+            JsonNode parsedPayload = parsePayload(event);
+            String eventId = extractEventId(event, parsedPayload);
+            String body = buildMessageBody(event, parsedPayload);
+            String routingKey = eventTypeToRoutingKey(event.getEventType());
 
-        Message message = MessageBuilder
-            .withBody(body.getBytes(StandardCharsets.UTF_8))
-            .setContentType(MessageProperties.CONTENT_TYPE_JSON)
-            .setMessageId(eventId)
-            .setDeliveryMode(MessageDeliveryMode.PERSISTENT)
-            .setHeader("event_type", event.getEventType())
-            .build();
+            log.debug("Publishing event payload preview [event_id={}, routing_key={}, payload_preview={}]",
+                eventId, routingKey, OutboxPollingService.truncate(body, 1000));
 
-        rabbit.invoke(operations -> {
-            operations.send(exchange, routingKey, message);
-            rabbit.waitForConfirmsOrDie(props.getPublisherConfirmTimeoutMs());
-            return null;
-        });
+            Message message = MessageBuilder
+                .withBody(body.getBytes(StandardCharsets.UTF_8))
+                .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+                .setMessageId(eventId)
+                .setDeliveryMode(MessageDeliveryMode.PERSISTENT)
+                .setHeader("event_type", event.getEventType())
+                .build();
 
-        log.debug("Broker confirmed event [id={}, type={}, routingKey={}]", eventId, event.getEventType(), routingKey);
+            rabbit.invoke(operations -> {
+                operations.send(exchange, routingKey, message);
+                rabbit.waitForConfirmsOrDie(props.getPublisherConfirmTimeoutMs());
+                return null;
+            });
+
+            log.info("Broker confirmed event publish [event_id={}, routing_key={}, event_type={}]",
+                eventId, routingKey, event.getEventType());
+        } finally {
+            OutboxMdc.clear();
+        }
     }
 
     protected abstract String buildMessageBody(T event, JsonNode parsedPayload);

@@ -131,16 +131,17 @@ public abstract class OutboxPollingService<T extends IOutboxEvent> implements Sm
 
     private void handleFailure(T event, Exception e) {
         int nextRetryCount = event.getRetryCount() + 1;
-        String errorMsg = truncate(e.getMessage(), 1000);
+        String errorMsg = OutboxMdc.truncate(e.getMessage(), 1000);
 
         if (nextRetryCount >= event.getMaxRetries()) {
             repository.markDead(event.getId(), nextRetryCount, errorMsg);
-            log.error("Event moved to DEAD after {} retries: {}", nextRetryCount, errorMsg);
+            log.error("Event moved to DEAD [event_id={}, retries={}]: {}",
+                event.getId(), nextRetryCount, errorMsg);
         } else {
             long backoffSeconds = (long) Math.pow(2, nextRetryCount);
             repository.reschedule(event.getId(), nextRetryCount, backoffSeconds, errorMsg);
-            log.warn("Publish failed, retry {}/{} scheduled in {}s: {}",
-                nextRetryCount, event.getMaxRetries(), backoffSeconds, errorMsg);
+            log.warn("Publish failed [event_id={}, retry={}/{}] scheduled in {}s: {}",
+                event.getId(), nextRetryCount, event.getMaxRetries(), backoffSeconds, errorMsg);
         }
     }
 
@@ -154,11 +155,6 @@ public abstract class OutboxPollingService<T extends IOutboxEvent> implements Sm
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-    }
-
-    public static String truncate(String s, int max) {
-        if (s == null) return null;
-        return s.length() <= max ? s : s.substring(0, max);
     }
 
     private String buildWorkerId() {

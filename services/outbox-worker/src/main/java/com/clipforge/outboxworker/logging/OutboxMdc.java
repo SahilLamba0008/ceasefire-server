@@ -28,7 +28,13 @@ public final class OutboxMdc {
     }
 
     public static void clear() {
-        MDC.clear();
+        MDC.remove("event_id");
+        MDC.remove("job_id");
+    }
+
+    public static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() <= max ? s : s.substring(0, max);
     }
 
     private static void putEventId(UUID eventId) {

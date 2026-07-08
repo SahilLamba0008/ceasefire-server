@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <property name="CONSOLE_LOG_PATTERN"
-              value="%d{ISO8601} %-5level [event_id=%X{event_id}, job_id=%X{job_id}] %logger - %msg%n"/>
+              value="%d{ISO8601} %-5level %replace(%X{event_id}){'^(.+)$','[event_id=$1] '}%replace(%X{job_id}){'^(.+)$','[job_id=$1] '}%logger - %msg%n"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">

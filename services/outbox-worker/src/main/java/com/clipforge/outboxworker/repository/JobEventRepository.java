@@ -113,10 +113,15 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
         for (RecoveredLease lease : resetLeases) {
             jdbc.update("""
                 UPDATE events.job_events
-                SET status = 'PENDING', locked_by = NULL, locked_at = NULL
+                SET status = 'PENDING', locked_by = NULL, locked_at = NULL, updated_at = now()
                 WHERE id = :id
+                  AND status = 'PROCESSING'
+                  AND locked_at < now() - make_interval(secs => :timeoutSeconds)
+                  AND retry_count < max_retries
                 """,
-                new MapSqlParameterSource("id", lease.eventId())
+                new MapSqlParameterSource()
+                    .addValue("id", lease.eventId())
+                    .addValue("timeoutSeconds", timeoutSeconds)
             );
 
             OutboxMdc.putEventContext(lease.eventId(), lease.jobId());
@@ -134,8 +139,13 @@ public class JobEventRepository implements IOutboxEventRepository<JobEvent> {
                 SET status = 'DEAD', locked_by = NULL, locked_at = NULL,
                     last_error = 'Stale lease: processing timed out', updated_at = now()
                 WHERE id = :id
+                  AND status = 'PROCESSING'
+                  AND locked_at < now() - make_interval(secs => :timeoutSeconds)
+                  AND retry_count >= max_retries
                 """,
-                new MapSqlParameterSource("id", lease.eventId())
+                new MapSqlParameterSource()
+                    .addValue("id", lease.eventId())
+                    .addValue("timeoutSeconds", timeoutSeconds)
             );
 
             OutboxMdc.putEventContext(lease.eventId(), lease.jobId());

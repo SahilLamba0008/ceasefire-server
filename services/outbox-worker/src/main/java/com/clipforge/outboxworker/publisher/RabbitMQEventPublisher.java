@@ -1,6 +1,7 @@
 package com.clipforge.outboxworker.publisher;
 
 import com.clipforge.outboxworker.config.OutboxProperties;
+import com.clipforge.outboxworker.logging.OutboxMdc;
 import com.clipforge.outboxworker.model.IOutboxEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,9 @@ public abstract class RabbitMQEventPublisher<T extends IOutboxEvent> implements 
         String body = buildMessageBody(event, parsedPayload);
         String routingKey = eventTypeToRoutingKey(event.getEventType());
 
+        log.debug("Publishing event payload preview [event_id={}, routing_key={}, payload_preview={}]",
+            eventId, routingKey, OutboxMdc.truncate(body, 1000));
+
         Message message = MessageBuilder
             .withBody(body.getBytes(StandardCharsets.UTF_8))
             .setContentType(MessageProperties.CONTENT_TYPE_JSON)
@@ -50,7 +54,8 @@ public abstract class RabbitMQEventPublisher<T extends IOutboxEvent> implements 
             return null;
         });
 
-        log.debug("Broker confirmed event [id={}, type={}, routingKey={}]", eventId, event.getEventType(), routingKey);
+        log.info("Broker confirmed event publish [event_id={}, routing_key={}, event_type={}]",
+            eventId, routingKey, event.getEventType());
     }
 
     protected abstract String buildMessageBody(T event, JsonNode parsedPayload);

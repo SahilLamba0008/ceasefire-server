@@ -1,8 +1,8 @@
 from config.database import get_connection
 from config.settings import GEMINI_API_KEY, YOUTUBE_API_KEY
+from services import render
 from services.analyze_service import AnalyzeService
 from services.ingest import YouTubeMetadataService
-from services import render
 from services.segment_service import SegmentService
 from services.transcript_service import format_transcript, get_transcript
 from services.video_pipeline import VideoProcessingPipeline

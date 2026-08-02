@@ -48,3 +48,19 @@ class BaseRepository:
             error_msg,
             error_cls,
         )
+
+    def _execute_read(self, query, params, error_msg, error_cls=None):
+        cursor = None
+
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+        except Exception as e:
+            logger.error(f"{error_msg}: {e}")
+            raise (error_cls or self.error_cls)(f"{error_msg}: {str(e)}") from e
+
+        finally:
+            if cursor:
+                cursor.close()

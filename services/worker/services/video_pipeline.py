@@ -11,12 +11,14 @@ class VideoProcessingPipeline:
         transcript_formatter,
         analyze_service,
         segment_service,
+        render_runner=None,
     ):
         self.metadata_service = metadata_service
         self.transcript_fetcher = transcript_fetcher
         self.transcript_formatter = transcript_formatter
         self.analyze_service = analyze_service
         self.segment_service = segment_service
+        self.render_runner = render_runner
 
     def run(self, video_id, job_id):
         logger.info(f"Received request for video_id: {video_id}, job_id: {job_id}")
@@ -34,5 +36,10 @@ class VideoProcessingPipeline:
 
         response = self.segment_service.create_segments(segments, job_id)
         logger.info(response)
+
+        if self.render_runner:
+            render_response = self.render_runner(job_id, video_id)
+            logger.info(render_response)
+            response["render"] = render_response
 
         return response

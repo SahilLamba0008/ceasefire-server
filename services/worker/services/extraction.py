@@ -71,7 +71,9 @@ def resolve_cdn_urls(video_id, quality):
 
     urls = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     if not urls:
-        raise ExternalServiceError(f"yt-dlp returned no CDN URLs for video_id={normalized_video_id}")
+        raise ExternalServiceError(
+            f"yt-dlp returned no CDN URLs for video_id={normalized_video_id}"
+        )
 
     video_url = urls[0]
     audio_url = urls[1] if len(urls) > 1 else urls[0]
@@ -146,7 +148,8 @@ def extract_segment(video_id, start, end, quality="720", output_path=None):
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise ExternalServiceError(
-            f"ffmpeg failed for video_id={normalized_video_id} start={start} end={end}: {result.stderr.strip()}"
+            "ffmpeg failed for video_id="
+            f"{normalized_video_id} start={start} end={end}: {result.stderr.strip()}"
         )
 
     return str(Path(output_path))

@@ -4,8 +4,7 @@ import tempfile
 
 from config.database import get_connection
 from repositories.clip_repository import ClipRepository
-from services.extraction import _normalize_video_id
-from services.extraction import extract_segment
+from services.extraction import _normalize_video_id, extract_segment
 from storage.factory import get_storage
 
 logger = logging.getLogger(__name__)
@@ -34,7 +33,9 @@ def run(job_id, video_id=None, conn=None, storage=None, extractor=extract_segmen
     storage = storage or get_storage()
     clip_repository = ClipRepository(conn)
 
-    normalized_video_id = _normalize_video_id(video_id) if video_id else _load_video_id(conn, job_id)
+    normalized_video_id = (
+        _normalize_video_id(video_id) if video_id else _load_video_id(conn, job_id)
+    )
     pending_clips = clip_repository.list_pending_render_clips(job_id)
 
     if not pending_clips:

@@ -40,3 +40,32 @@ class ClipRepository(BaseRepository):
             error_msg=f"Failed to mark clip {clip_id} as failed",
             error_cls=PersistenceError,
         )
+
+    def list_pending_render_clips(self, job_id):
+        rows = self._execute_read(
+            """
+            SELECT
+                c.clip_id,
+                c.segment_id,
+                s.segment_start_time,
+                s.segment_end_time
+            FROM clips c
+            JOIN segments s ON s.segment_id = c.segment_id
+            WHERE c.job_id = %s
+              AND c.status = 'pending'
+            ORDER BY s.segment_start_time ASC, c.created_at ASC
+            """,
+            (job_id,),
+            error_msg=f"Failed to load pending clips for job {job_id}",
+            error_cls=PersistenceError,
+        )
+
+        return [
+            {
+                "clip_id": row[0],
+                "segment_id": row[1],
+                "segment_start_time": row[2],
+                "segment_end_time": row[3],
+            }
+            for row in rows
+        ]

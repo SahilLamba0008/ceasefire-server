@@ -6,3 +6,4 @@ google-genai
 watchfiles
 google-api-python-client
 ruff
+yt-dlp

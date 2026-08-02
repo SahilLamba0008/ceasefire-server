@@ -12,6 +12,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # "idle": stay up without calling external services (default, until the
 #         RabbitMQ jobs.created consumer is wired in)
 WORKER_MODE = os.getenv("WORKER_MODE", "idle")
+STORAGE_TYPE = os.getenv("STORAGE_TYPE", "local")
+STORAGE_ROOT = os.getenv("STORAGE_ROOT", "./data/clipforge")
 
 # "local" or "hosted" — switches which RabbitMQ URL is active without
 # overwriting either value in .env
